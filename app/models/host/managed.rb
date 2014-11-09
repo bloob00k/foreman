@@ -141,6 +141,7 @@ class Host::Managed < Host::Base
     include Orchestration::Puppetca
     include Orchestration::SSHProvision
     include Orchestration::Realm
+    include Orchestration::Metadata
     include HostTemplateHelpers
 
     validates :ip, :uniqueness => true, :if => Proc.new {|host| host.require_ip_validation?}
