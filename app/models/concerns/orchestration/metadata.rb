@@ -10,9 +10,12 @@ module Orchestration::Metadata
   end
 
   def metadata?
-     p "************** metadata?"
      managed? # and ip present?
 #     false  # TBS!!
+  end
+
+  def metadata
+    subnet.metadata_proxy(:variant => operatingsystem.pxe_variant) if metadata?
   end
 
 
@@ -22,8 +25,6 @@ module Orchestration::Metadata
   # +returns+ : Boolean true on success
   def setMetadata
     logger.info "Add the metadata configuration for #{name}"
-    p tftp.inspect
-    p self.inspect
     metadata.set ip, :pxeconfig => generate_pxe_template
   end
 
@@ -38,7 +39,6 @@ module Orchestration::Metadata
 
   def validate_metadata
     # TBS
-    p "********* validate metadata"
     return unless metadata?
     return unless operatingsystem
     return if Rails.env == "test"
@@ -46,19 +46,16 @@ module Orchestration::Metadata
 
 
   def queue_metadata
-    p "********* queue metadata"
     return unless metadata? and errors.empty?
     new_record? ? queue_metadata_create : queue_metadata_update
   end
 
   def queue_metadata_create
-    p "********* queue metadata create"
     queue.create(:name => _("metadata Settings for %s") % self, :priority => 20,
                  :action => [self, :setMetadata])
   end
 
   def queue_metadata_update
-    p "********* queue metadata update"
     set_metadata = false
     # we switched build mode
     set_metadata = true if old.build? != build?
@@ -78,7 +75,6 @@ module Orchestration::Metadata
   end
 
   def queue_metadata_destroy
-    p "********* queue metadata destroy"
     return unless metadata? and errors.empty?
     return true if jumpstart?
     queue.create(:name => _("metadata Settings for %s") % self, :priority => 20,

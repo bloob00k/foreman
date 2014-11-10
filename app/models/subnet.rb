@@ -17,6 +17,7 @@ class Subnet < ActiveRecord::Base
   has_many :hostgroups
   belongs_to :dhcp, :class_name => "SmartProxy"
   belongs_to :tftp, :class_name => "SmartProxy"
+  belongs_to :metadata, :class_name => "SmartProxy"
   belongs_to :dns,  :class_name => "SmartProxy"
   has_many :subnet_domains, :dependent => :destroy
   has_many :domains, :through => :subnet_domains
@@ -123,6 +124,14 @@ class Subnet < ActiveRecord::Base
     @tftp_proxy ||= ProxyAPI::TFTP.new({:url => tftp.url}.merge(attrs)) if tftp?
   end
 
+  def metadata?
+    !!(metadata and metadata.url and !metadata.url.blank?)
+  end
+
+  def metadata_proxy(attrs = {})
+    @metadata_proxy ||= ProxyAPI::Metadata.new({:url => metadata.url}.merge(attrs)) if metadata?
+  end
+
   # do we support DNS PTR records for this subnet
   def dns?
     !!(dns and dns.url and !dns.url.blank?)
@@ -187,7 +196,7 @@ class Subnet < ActiveRecord::Base
   end
 
   def proxies
-    [dhcp, tftp, dns].compact
+    [dhcp, tftp, metadata, dns].compact
   end
 
   def has_vlanid?

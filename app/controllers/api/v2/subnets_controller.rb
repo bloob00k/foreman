@@ -41,6 +41,7 @@ module Api
           param :domain_ids, Array, :desc => N_("Domains in which this subnet is part")
           param :dhcp_id, :number, :desc => N_("DHCP Proxy to use within this subnet")
           param :tftp_id, :number, :desc => N_("TFTP Proxy to use within this subnet")
+          param :metadata_id, :number, :desc => N_("Metadata Proxy to use within this subnet")
           param :dns_id, :number, :desc => N_("DNS Proxy to use within this subnet")
           param :boot_mode, String, :desc => N_('Default boot mode for interfaces assigned to this subnet, valid values are "Static", "DHCP"')
           param_group :taxonomies, ::Api::V2::BaseController

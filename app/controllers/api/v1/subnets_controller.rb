@@ -39,6 +39,7 @@ module Api
         param :dhcp_id, :number, :desc => 'DHCP Proxy to use within this subnet'
         param :tftp_id, :number, :desc => 'TFTP Proxy to use within this subnet'
         param :dns_id, :number, :desc => 'DNS Proxy to use within this subnet'
+        param :metadata_id, :number, :desc => 'Metadata Proxy to use within this subnet'
       end
 
       def create
@@ -62,6 +63,7 @@ module Api
         param :dhcp_id, :number, :allow_nil => true, :desc => 'DHCP Proxy to use within this subnet'
         param :tftp_id, :number, :allow_nil => true, :desc => 'TFTP Proxy to use within this subnet'
         param :dns_id, :number, :allow_nil => true, :desc => 'DNS Proxy to use within this subnet'
+        param :metadata_id, :number, :allow_nil => true, :desc => 'Metadata Proxy to use within this subnet'
       end
 
       def update

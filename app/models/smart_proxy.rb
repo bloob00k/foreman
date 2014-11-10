@@ -65,6 +65,7 @@ class SmartProxy < ActiveRecord::Base
     ids = []
     ids << hosts.joins(:subnet).pluck('DISTINCT subnets.dhcp_id')
     ids << hosts.joins(:subnet).pluck('DISTINCT subnets.tftp_id')
+    ids << hosts.joins(:subnet).pluck('DISTINCT subnets.metadata_id')
     ids << hosts.joins(:subnet).pluck('DISTINCT subnets.dns_id')
     ids << hosts.joins(:domain).pluck('DISTINCT domains.dns_id')
     ids << hosts.joins(:realm).pluck('DISTINCT realm_proxy_id')
