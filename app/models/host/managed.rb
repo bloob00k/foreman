@@ -707,6 +707,7 @@ class Host::Managed < Host::Base
       ids << s.dhcp_id
       ids << s.tftp_id
       ids << s.dns_id
+      ids << s.metadata_id
     end
 
     [domain, hostgroup.try(:domain)].compact.each do |d|

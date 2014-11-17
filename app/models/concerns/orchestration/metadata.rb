@@ -15,7 +15,7 @@ module Orchestration::Metadata
   end
 
   def metadata
-    subnet.metadata_proxy(:variant => operatingsystem.pxe_variant) if metadata?
+    subnet.metadata_proxy if metadata?
   end
 
 
@@ -25,7 +25,14 @@ module Orchestration::Metadata
   # +returns+ : Boolean true on success
   def setMetadata
     logger.info "Add the metadata configuration for #{name}"
-    metadata.set ip, :pxeconfig => generate_pxe_template
+    metadata.set ip, :hostname, name
+  end
+
+# Sets metadata for the host
+  # +returns+ : Boolean true on success
+  def setMacAddress
+    logger.info "Add the mac address for #{name}"
+    metadata.set ip, :mac, mac  #need to update metadat.set method to take parameter.  Or should we do this in a single blob, like dns_record_attrs?
   end
 
   # Removes metadata for the host
@@ -53,6 +60,8 @@ module Orchestration::Metadata
   def queue_metadata_create
     queue.create(:name => _("metadata Settings for %s") % self, :priority => 20,
                  :action => [self, :setMetadata])
+    queue.create(:name => _("mac metadata for %s") % self, :priority => 20,
+                 :action => [self, :setMacAddress])
   end
 
   def queue_metadata_update

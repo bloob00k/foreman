@@ -282,9 +282,11 @@ Foreman::Application.routes.draw do
         end
       end
     end
-    resources :media, :except => [:show] do
-      collection do
-        get 'auto_complete_search'
+    constraints(:id => /[^\/]+/) do
+      resources :media, :except => [:show] do
+        collection do
+          get 'auto_complete_search'
+        end
       end
     end
 

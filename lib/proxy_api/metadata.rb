@@ -9,10 +9,12 @@ module ProxyAPI
     # Creates a Metadata entry
     # [+IP+]  : IP address
     # [+args+] : Hash containing
-    #    :pxeconfig => String containing the configuration
+    #    
     # Returns  : Boolean status
-    def set(ip, args)
-      parse(post(args, "#{@variant}/#{ip}"))
+    def set(ip, key, value)
+      print "*******************\n"
+         
+      parse(post({:value => value}, "#{ip}/#{key}"))
     rescue => e
       raise ProxyException.new(url, e, N_("Unable to set metadata entry for %s"), ip)
     end
@@ -21,7 +23,7 @@ module ProxyAPI
     # [+ip+] : String in dotted quad format
     # Returns : Boolean status
     def delete(ip)
-      parse(super("#{@variant}/#{ip}"))
+      parse(super("#{ip}"))
     rescue => e
       raise ProxyException.new(url, e, N_("Unable to delete metadata entry for %s"), ip)
     end
