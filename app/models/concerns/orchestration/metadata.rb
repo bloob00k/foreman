@@ -75,7 +75,7 @@ module Orchestration::Metadata
     if ip != old.ip
       set_metadata = true
       # clean up old metadata file
-      if old.metadata?
+      if old.metadata? and old.ip?
         queue.create(:name => _("Remove old metadata Settings for %s") % old, :priority => 19,
                      :action => [old, :delMetadata])
       end
@@ -84,9 +84,9 @@ module Orchestration::Metadata
   end
 
   def queue_metadata_destroy
-    return unless metadata? and errors.empty?
+    return unless metadata? and ip? and errors.empty?
     return true if jumpstart?
-    queue.create(:name => _("metadata Settings for %s") % self, :priority => 20,
+    queue.create(:name => _("Delete metadata settings for %s") % self, :priority => 20,
                  :action => [self, :delMetadata])
   end
 
