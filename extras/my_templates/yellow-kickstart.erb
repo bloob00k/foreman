@@ -1,0 +1,405 @@
+<%
+  pm_set = @host.puppetmaster.empty? ? false : true
+  proxy_string = @host.params['http-proxy'] ? " --proxy=http://#{@host.params['http-proxy']}:#{@host.params['http-proxy-port']}" : ''
+  puppet_enabled = pm_set || @host.params['force-puppet']
+%>
+install
+<%= @mediapath %><%= proxy_string %>
+
+repo --name=Yellow-OS --baseurl=http://yum.messagelabs.net/yellow/6.5/6.5.0/core/
+repo --name=Yellow-OS-Point1 --baseurl=http://yum.messagelabs.net/yellow/6.5/6.5.1/core/
+repo --name=Yellow-OS-Point2 --baseurl=http://yum.messagelabs.net/yellow/6.5/6.5.2/core/
+repo --name=Centos-Updates --baseurl=http://yum.messagelabs.net/centos/6.5/6.5.0/updates-core/
+repo --name=Centos-Updates-Point1 --baseurl=http://yum.messagelabs.net/centos/6.5/6.5.1/updates-core/
+repo --name=Centos-Updates-Point2 --baseurl=http://yum.messagelabs.net/centos/6.5/6.5.2/updates-core/
+repo --name=Users-CompleteBackend --baseurl=http://yum.messagelabs.net/users/completebackend/
+
+repo --name="EPEL" --mirrorlist=https://mirrors.fedoraproject.org/metalink?repo=epel-<%= @host.operatingsystem.major %>&arch=<%= @host.architecture %><%= proxy_string %>
+
+lang en_GB.UTF-8
+keyboard uk
+
+rootpw --iscrypted <%= root_pass %> 
+firewall --enabled --port=22:tcp
+authconfig --enableshadow --enablemd5
+selinux --disabled
+skipx
+timezone --utc Etc/UTC
+%include /tmp/partitions
+reboot --eject
+text
+install
+
+%packages
+@yellowbuild
+-firstboot-tui
+-system-config-network-tui
+-redhat-lsb
+-cups
+-paps
+-bluez-gnome
+-bluez-utils
+-libnotify
+-notification-daemon
+-libwnck
+-GConf2
+-trousers
+-ecryptfs-utils
+-cups-libs
+-gtk2
+-paps
+-yum-updatesd
+-avahi
+-avahi-compat-libdns_sd
+-dbus-python
+-NetworkManager
+-NetworkManager-glib
+-rp-pppoe
+-irda-utils
+-hal
+-kudzu
+-pm-utils
+-libX11
+-libXau
+-libXcursor
+-libXdmcp
+-libXext
+-libXfixes
+-libXft
+-libXi
+-libXinerama
+-libXrandr
+-libXrender
+-libXres
+-libXt
+-libXxf86vm
+-cairo
+-pango
+-mesa-libGL
+-startup-notification
+-setuptool
+-ntsysv
+-libhugetlbfs
+-nano
+-sendmail
+-mdadm
+-rsh
+-fontconfig
+-ipsec-tools
+-cyrus-sasl-plain
+-procmail
+-pam_smb
+-patch
+-unix2dos
+-ppp
+-libpng
+-libtiff
+-libjpeg
+-lftp
+-rsync
+-desktop-file-utils
+-redhat-menus
+-htmlview
+-pinfo
+-at
+-krb5-workstation
+-sos
+-dosfstools
+-ORBit2
+-libIDL
+-mkbootdisk
+-atk
+-gamin
+-gamin-python
+-dbus-glib
+-pygobject2
+-nc
+-ypbind
+-yp-tools
+-ccid
+-coolkey
+-oddjob
+-oddjob-libs
+-aspell
+-aspell-en
+-pam_krb5
+-microcode_ctl
+-pam_ccreds
+-nss_db
+-make
+-nss_ldap
+-mozldap
+-specspo
+-centos-release-notes
+-time
+-mailx
+-pax
+-autofs
+-smartmontools
+-logwatch
+-cryptsetup-luks
+-gnutls
+-dbus
+-dbus-libs
+-wpa_supplicant
+-mailcap
+-dump
+-ifd-egate
+-pcsc-lite
+-usbutils
+-libusb
+-talk
+-m4
+-dos2unix
+-gpm
+-eject
+-finger
+-freetype
+-nfs-utils
+-nfs-utils-lib
+-unzip
+-tree
+-attr
+-stunnel
+-zip
+-libICE
+-libSM
+-hicolor-icon-theme
+-pam_pkcs11
+-libdrm
+-prelink
+-jwhois
+-cyrus-sasl
+-udftools
+-acl
+-numactl
+-nss-tools
+-mcelog
+-kbd
+-tmpwatch
+-curl
+-gnupg
+-pkinit-nss
+-pcmciautils
+-quota
+-conman
+-acpid
+-parted
+-ksh
+-dhcpv6-client
+-anacron
+-mtools
+-rdate
+-setarch
+-words
+-rdist
+-mgetty
+-tcsh
+-cpuspeed
+-ed
+-binutils
+-crash
+-amtu
+-audit
+-ftp
+-rsyslog
+-OpenIPMI
+-OpenIPMI-libs
+-svrcore
+-virt-what
+-dmidecode
+-net-snmp-libs
+-yum-security
+-wireless-tools
+-man-pages-overrides
+-fprintd
+-fprintd-pam
+-abrt
+-abrt-libs
+-abrt-addon-ccpp
+-abrt-tui
+-abrt-addon-kerneloops
+-abrt-cli
+-abrt-addon-python
+-libreport
+-libreport-cli
+-libreport-python
+-libreport-plugin-rhtsupport
+-libreport-compat
+-libreport-plugin-reportuploader
+-libreport-plugin-kerneloops
+-libreport-plugin-mailx
+-libreport-plugin-logger
+-libproxy
+-libproxy-bin
+-libproxy-python
+-postfix
+-kexec-tools
+-ivtv-firmware
+-xorg-x11-drv-ati-firmware
+-ql2400-firmware
+-ql2100-firmware
+-libertas-usb8388-firmware
+-ql2500-firmware
+-zd1211-firmware
+-rt61pci-firmware
+-ql2200-firmware
+-ipw2100-firmware
+-ipw2200-firmware
+-bfa-firmware
+-iwl100-firmware
+-aic94xx-firmware
+-iwl1000-firmware
+-iwl5000-firmware
+-ivtv-firmware
+-atmel-firmware
+-iwl4965-firmware
+-iwl3945-firmware
+-rt73usb-firmware
+-ql23xx-firmware
+-iwl5150-firmware
+-iwl6050-firmware
+-iwl6000g2a-firmware
+-iwl6000-firmware
+-b43-fwcutter
+-b43-openfwwf
+-bridge-utilp
+-fipscheck
+-scl-utils
+-rfkill
+-cyrus-sasl
+-procmail
+-centos-indexhtml
+-hunspell
+-hunspell-en
+-alsa-utils
+-alsa-lib
+
+epel-release
+
+puppet
+
+%pre
+
+##### PRE #####
+
+#!/bin/sh
+
+#/usr/bin/chvt 3 
+
+IGNORE=""
+for DISK in c0d1 c1d0 c1d1; do
+    if [ -e /dev/cciss/$DISK ]; then
+		if [ -z "$IGNOREDISK" ]; then
+			IGNORE=${DISK}
+
+		else
+			IGNORE=${IGNORE}","${DISK}
+		fi
+	fi
+done
+
+if [ ! -z "$IGNORE" ]; then
+	IGNOREDISK="ignoredisk --drives=$IGNORE"
+fi
+
+# Hardware check has been removed from kickstart per Marval OPT-79716
+	
+DIR="/sys/block"
+ROOTDRIVE=""
+# Check for RAID controller disks
+if [ -d $DIR/cciss!c0d0 ]; then
+  ROOTDRIVE=cciss/c0d0
+else
+  # find the first drive that doesn’t have removable media and isn’t USB
+  for DEV in sda sdb sdc sdd sde hda hdb hdc hdd hde; do
+    if [ -d $DIR/$DEV ]; then
+      ls -l $DIR/$DEV/device | grep -q /usb
+      if [ $? -ne 0 ]; then
+        REMOVABLE=`cat $DIR/$DEV/removable`
+        if (( $REMOVABLE == 0 )); then
+          if [ -z $ROOTDRIVE ]; then
+            ROOTDRIVE=$DEV
+          fi
+        fi
+      fi
+    fi
+  done
+fi
+
+DRIVE_SIZE=`fdisk -l /dev/$ROOTDRIVE|grep ^Disk|awk '{ print $5 }'`
+
+# Swap 2GB for machines with less than 60GB disk.
+if [ "$DRIVE_SIZE" -lt "64424509440" ]; then
+	SWAP="part swap --size=2048 --ondisk=$ROOTDRIVE --asprimary"
+else
+	SWAP="part swap --size=8192 --ondisk=$ROOTDRIVE --asprimary"
+fi
+
+echo "# # # Installing to $ROOTDRIVE # # #"
+
+# Setup partition sizes depending on the drive size
+if [ "$DRIVE_SIZE" -lt "17179869184" ]; then
+	# disk is less than 16GB
+	ROOT_PART=3072
+	HOME_PART=1024
+	TMP_PART=1024
+else
+	if [ "$DRIVE_SIZE" -lt "42949672960" ]; then
+		# disk is less than 40GB
+		ROOT_PART=5120
+		HOME_PART=2048
+		TMP_PART=2048
+	else
+		# disk is 40GB or more
+		ROOT_PART=10240
+		HOME_PART=5120
+		TMP_PART=5120
+	fi
+fi
+
+cat << EOF > /tmp/partitions
+bootloader --location=mbr --driveorder=$ROOTDRIVE --md5pass=\$1\$gsR5a1\$Xz8/E39frg977a.Yu5eI11
+clearpart --all --drives=$ROOTDRIVE --initlabel
+zerombr yes
+part /boot --fstype=ext4 --size=100 --ondisk=$ROOTDRIVE --asprimary --fsoptions=nodev,noatime
+part / --fstype=ext4 --size=$ROOT_PART --ondisk=$ROOTDRIVE --asprimary --fsoptions=noatime
+part /home --fstype=ext4 --size=$HOME_PART --ondisk=$ROOTDRIVE --fsoptions=nosuid,nodev,noatime
+part /tmp --fstype=ext4 --size=$TMP_PART --ondisk=$ROOTDRIVE --fsoptions=noexec,nosuid,nodev,noatime
+part /var --fstype=ext4 --size=900 --ondisk=$ROOTDRIVE --grow --fsoptions=noatime
+$SWAP
+$IGNOREDISK
+EOF
+
+echo -e "# # #\n\n"
+
+%post
+
+##### POST #####
+
+# Remove graphical boot
+sed -i 's/ rhgb quiet//' /boot/grub/grub.conf
+sed -i 's/^hiddenmenu/#hiddenmenu/' /boot/grub/grub.conf
+plymouth-set-default-theme details
+kernel_ver=`/bin/ls /lib/modules | sort -n | tail -n1`
+/sbin/new-kernel-pkg --package kernel --mkinitrd --dracut --depmod --install $kernel_ver
+
+<% if puppet_enabled %>
+echo "Configuring puppet"
+cat > /etc/puppet/puppet.conf << EOF
+<%= snippet 'puppet.conf' %>
+EOF
+
+# Setup puppet to run on system reboot
+/sbin/chkconfig --level 345 puppet on
+
+/usr/bin/puppet agent --config /etc/puppet/puppet.conf -o --tags no_such_tag <%= @host.puppetmaster.blank? ? '' : "--server #{@host.puppetmaster}" %> --no-daemonize
+<% end -%>
+
+# Inform the build system that we are done.
+echo "Informing Foreman that we are built"
+wget -q -O /dev/null --no-check-certificate <%= foreman_url %>
+
+
+
+%end
