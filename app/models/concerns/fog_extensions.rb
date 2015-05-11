@@ -21,6 +21,7 @@ begin
   Fog::Compute::Google::Flavor.send(:include, FogExtensions::Google::Flavor)
 
   require 'fog/libvirt'
+  require 'fog/libvirt/compute'
   require 'fog/libvirt/models/compute/server'
   Fog::Compute::Libvirt::Server.send(:include, FogExtensions::Libvirt::Server)
 
@@ -46,9 +47,6 @@ begin
 
   require 'fog/vsphere/models/compute/folder'
   Fog::Compute::Vsphere::Folder.send(:include, FogExtensions::Vsphere::Folder)
-
-  require 'fog/vsphere/requests/compute/get_virtual_machine'
-  Fog::Compute::Vsphere::Real.send(:include, FogExtensions::Vsphere::Template)
 
   require 'fog/rackspace'
   require 'fog/rackspace/models/compute_v2/server'
