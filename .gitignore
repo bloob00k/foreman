@@ -36,3 +36,4 @@ _build
 zeus.json
 custom_plan.rb
 pkg/
+vendor/*

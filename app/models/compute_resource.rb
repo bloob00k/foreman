@@ -83,6 +83,7 @@ class ComputeResource < ActiveRecord::Base
   end
 
   def test_connection(options = {})
+    Rails.logger.debug "compute resource test connection"
     valid?
   end
 

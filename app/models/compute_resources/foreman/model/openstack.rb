@@ -35,6 +35,7 @@ module Foreman::Model
     end
 
     def test_connection(options = {})
+      Rails.logger.debug "openstack compute resrource test connection"
       super
       errors[:user].empty? and errors[:password] and tenants
     rescue => e
@@ -113,7 +114,8 @@ module Foreman::Model
                                      :openstack_api_key  => password,
                                      :openstack_username => user,
                                      :openstack_auth_url => url,
-                                     :openstack_tenant   => tenant)
+                                     :openstack_tenant   => tenant,
+                                     :connection_options => { :read_timeout => 120, :write_timeout => 120})
     end
 
     def network_client

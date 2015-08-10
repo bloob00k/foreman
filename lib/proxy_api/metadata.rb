@@ -11,9 +11,7 @@ module ProxyAPI
     # [+args+] : Hash containing
     #    
     # Returns  : Boolean status
-    def set(ip, key, value)
-      print "*******************\n"
-         
+    def set(ip, key, value)     
       parse(post({:value => value}, "#{ip}/#{key}"))
     rescue => e
       raise ProxyException.new(url, e, N_("Unable to set metadata entry for %s"), ip)

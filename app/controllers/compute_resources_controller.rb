@@ -88,10 +88,12 @@ class ComputeResourcesController < ApplicationController
     # cr_id is posted from AJAX function. cr_id is nil if new
     Rails.logger.info "CR_ID IS #{params[:cr_id]}"
     if params[:cr_id].present? && params[:cr_id] != 'null'
+      Rails.logger.debug "authorized?"
       @compute_resource = ComputeResource.authorized(:edit_compute_resources).find(params[:cr_id])
       params[:compute_resource].delete(:password) if params[:compute_resource][:password].blank?
       @compute_resource.attributes = params[:compute_resource]
     else
+      Rails.logger.debug "new_provider"
       @compute_resource = ComputeResource.new_provider(params[:compute_resource])
     end
     @compute_resource.test_connection :force => true

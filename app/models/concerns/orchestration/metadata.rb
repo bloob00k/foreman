@@ -10,7 +10,7 @@ module Orchestration::Metadata
   end
 
   def metadata?
-     managed? # and ip present?
+     managed? && subnet && subnet.metadata? #  And ip present?
 #     false  # TBS!!
   end
 
