@@ -69,8 +69,6 @@ module Fog
       connection = Fog::Core::Connection.new(uri.to_s, false, connection_options)
       @openstack_api_key  = options[:openstack_api_key]
       @openstack_username = options[:openstack_username]
-
-      puts options.inspect
       
       response = connection.request({
         :expects  => [200, 204],
@@ -93,9 +91,10 @@ module Fog
     def self.authenticate_v2(options, connection_options = {})
       
       Rails.logger.debug "authenticate_v2"
+      Rails.logger.debug caller[0]
 
       puts options.inspect
-      puts connection_options.inspect
+      puts caller
       
       uri                   = options[:openstack_auth_uri]
       tenant_name           = options[:openstack_tenant]
@@ -229,42 +228,42 @@ module Fog
       tenant_name = options[:openstack_tenant].to_s
       auth_token  = options[:openstack_auth_token] || options[:unscoped_token]
       uri         = options[:openstack_auth_uri]
-      domain_name = options[:openstack_auth_domain] || 'GSG'
-      project_name = options[:openstack_tenant] || 'ESS'
+      domain_name = options[:openstack_auth_domain]
+      domain_id   = options[:openstack_domain_id]
+      project_name = options[:openstack_tenant]
     
       request_body = {:auth => Hash.new}
     
-      if auth_token
-        request_body[:auth][:token] = {
-          :id => auth_token
-        }
-      else
-        request_body[:auth][:identity] = {:password => Hash.new}
-        request_body[:auth][:identity][:password][:user] = {
-          :name => username,
-          :password => api_key,
-          :domain   => {
-            :name => domain_name
-          }
-        }
     
-        request_body[:auth][:identity][:password][:user][:domain] = (domain_name) ? {:name => domain_name.to_s} : {:id => "default"}
-         
-        request_body[:auth][:identity][:methods] = ["password"]
-        
+      # in theory we ought to use token auth if we have a token already, but that doesn't seem to give us the catalog, so always doing password auth.
+      
+      request_body[:auth][:identity] = {:password => Hash.new}
+      request_body[:auth][:identity][:password][:user] = {
+        :name => username,
+        :password => api_key,
+        :domain   => {
+          :name => domain_name
+        }
+      }
+    
+      request_body[:auth][:identity][:password][:user][:domain] = (domain_name) ? {:name => domain_name.to_s} : {:id => (domain_id) ? domain_id : "default"}
+       
+      request_body[:auth][:identity][:methods] = ["password"]
+      
+      if project_name || domain_name
         request_body[:auth][:scope] = Hash.new
         
         if project_name
           request_body[:auth][:scope][:project] = { 
               :name => project_name.to_s
           }
-          request_body[:auth][:scope][:project][:domain] = (domain_name) ? {:name => domain_name.to_s} : {:id => "default"}
+          request_body[:auth][:scope][:project][:domain] = (domain_name) ? {:name => domain_name.to_s} : {:id => (domain_id) ? domain_id :"default"}
         else
-          request_body[:auth][:scope][:domain] = (domain_name) ? {:name => domain_name.to_s} : {:id => "default"}
+          request_body[:auth][:scope][:domain] = (domain_name) ? {:name => domain_name.to_s} : {:id => (domain_id) ? domain_id :"default"}
         end
-      end
-      
-      puts Fog::JSON.encode(request_body)
+      end  
+          
+      #puts Fog::JSON.encode(request_body)
     
       connection = Fog::Core::Connection.new(uri.to_s + '?nocatalog', false, connection_options)
     
@@ -293,6 +292,7 @@ module Fog
     
     
     def self.get_service_v3(body, service_type=[], service_name=nil)
+      return nil unless body['token'].key?('catalog')
       body['token']['catalog'].find do |s|
         if service_name.nil? or service_name.empty?
           service_type.include?(s['type'])
@@ -300,7 +300,7 @@ module Fog
           service_type.include?(s['type']) and s['name'] == service_name
         end
       end
-    end
+   end
     
     
     
@@ -317,20 +317,16 @@ module Fog
       body, token = retrieve_tokens_v3(options, connection_options)
       service = get_service_v3(body, service_type, service_name)
     
+      Rails.logger.debug "authenticate_v3"
+
+      Rails.logger.debug options.inspect
+      
       options[:unscoped_token] = token
     
-      service['endpoints'] = service['endpoints'].select do |endpoint|
-        endpoint['interface'] == endpoint_type
-      end
-    
-      print "===\n", service, "\n---\n"
-    
       unless service
-        print "no service \n"
-        
         unless tenant_name
           response = Fog::Core::Connection.new(
-            "#{uri.scheme}://#{uri.host}:#{uri.port}/v2.0/tenants", false, connection_options).request({
+            "#{uri.scheme}://#{uri.host}:#{uri.port}/v3/users/#{body['token']['user']['id']}/projects", false, connection_options).request({
               :expects => [200, 204],
               :headers => {'Content-Type' => 'application/json',
                            'Accept' => 'application/json',
@@ -339,16 +335,21 @@ module Fog
             })
         
           body = Fog::JSON.decode(response.body)
-          if body['tenants'].empty?
+          if body['projects'].empty?
             raise Fog::Errors::NotFound.new('No Tenant Found')
           else
-            options[:openstack_tenant] = body['tenants'].first['name']
+            options[:openstack_tenant] = body['projects'].first['name']
+            options[:openstack_domain_id] = body['projects'].first['domain_id']
           end
         end
     
-        body = retrieve_tokens_v3(options, connection_options)
+        body, token = retrieve_tokens_v3(options, connection_options)
         service = get_service_v3(body, service_type, service_name)
     
+      end
+    
+      service['endpoints'] = service['endpoints'].select do |endpoint|
+        endpoint['interface'] == endpoint_type
       end
     
       service['endpoints'] = service['endpoints'].select do |endpoint|
@@ -377,7 +378,7 @@ module Fog
       end
     
       identity_service = get_service_v3(body, identity_service_type) if identity_service_type
-      tenant = body['token']['project']['domain']['name']
+      tenant = body['token']['project']['name']
       user = body['token']['user']['name']
     
       management_url = service['endpoints'][0]['url']
