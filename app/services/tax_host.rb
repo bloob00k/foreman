@@ -1,5 +1,4 @@
 class TaxHost
-
   FOREIGN_KEYS = [:location_id, :organization_id, :hostgroup_id,
                   :environment_id, :domain_id, :medium_id,
                   :subnet_id, :compute_resource_id, :realm_id]
@@ -19,7 +18,7 @@ class TaxHost
 
   # returns a hash of HASH_KEYS used ids by hosts in a given taxonomy
   def used_ids
-    @used_ids = default_ids_hash(populate_values = true)
+    @used_ids = default_ids_hash(true)
   end
 
   def selected_ids
@@ -81,7 +80,7 @@ class TaxHost
 
   def missing_ids
     return @missing_ids if @missing_ids
-    missing_ids = Array.new
+    missing_ids = []
     need_to_be_selected_ids.each do |key, values|
       taxable_type = hash_key_to_class(key)
       values.each do |v|
@@ -107,7 +106,7 @@ class TaxHost
 
   def mismatches
     return @mismatches if @mismatches
-    mismatches = Array.new
+    mismatches = []
     need_to_be_selected_ids.each do |key, values|
       taxable_type = hash_key_to_class(key)
       values.each do |v|
@@ -126,7 +125,6 @@ class TaxHost
 
   def check_for_orphans
     found_orphan = false
-    error_msg = "The following must be selected since they belong to hosts:\n\n"
     need_to_be_selected_ids.each do |key, array_values|
       taxable_type = hash_key_to_class(key)
       unless array_values.empty?
@@ -197,12 +195,12 @@ class TaxHost
   end
 
   def union_deep_hashes(h1, h2)
-    h1.merge!(h2) {|k, v1, v2| v1.kind_of?(Array) && v2.kind_of?(Array) ? v1 | v2 : v1 }
+    h1.merge!(h2) {|k, v1, v2| v1.is_a?(Array) && v2.is_a?(Array) ? v1 | v2 : v1 }
   end
 
   def substract_deep_hashes(h1, h2)
     h1.merge!(h2) do |k, v1, v2|
-      if v1.kind_of?(Array) && v2.kind_of?(Array)
+      if v1.is_a?(Array) && v2.is_a?(Array)
         v1.map(&:to_i) - v2.map(&:to_i) - [0]
       else
         v1.map(&:to_i)

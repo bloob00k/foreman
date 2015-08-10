@@ -37,10 +37,13 @@
                              :include_blank => "All Environments - (Not filtered)",:class=>'form-control', :onchange=>'filterByEnvironment(this)'%>
             </div>
           </div>
+          <div class='col-md-6 text-right'>
+            <%= documentation_button('4.2.5ParameterizedClasses') %>
+          </div>
         </div>
         <div class="smart-var-left col-md-3">
           <ul class="nav nav-pills nav-stacked smart-var-tabs" data-tabs="pills">
-            <% @puppetclass.class_params.all(:include => :environments).each do |key| %>
+            <% @puppetclass.class_params.includes(:environments, :environment_classes, :lookup_values).each do |key| %>
               <li data-used-environments=<%= key.environments.map(&:to_s).to_json %> >
                 <a data-toggle="tab" id="pill_<%= key.to_s.gsub(' ','_') + '_' + key.id.to_s %>" href="#<%= key.to_s.gsub(' ','_') + '_' + key.id.to_s %>" title="<%= key %>">
                   <div class="clip"><%= icon_text((key.override ? "flag": ""), key.to_s.gsub('_',' ')) %></div>
@@ -58,20 +61,17 @@
       <% end %>
     </div>
     <div class="tab-pane lookup-keys-container" id="smart_vars">
-      <% if @puppetclass.lookup_keys.empty? %>
-        <div class="alert alert-warning alert-dismissable">
-          <%= alert_close %>
-          <p><strong><%= _('Help!') %></strong>
-            <%= (_('What is a <a href="%s" rel="external">Smart variable</a>?') % "http://www.theforeman.org/manuals/#{SETTINGS[:version].short}/index.html#4.2.4SmartVariables").html_safe %>
-          </p>
-        </div>
-      <% end %>
       <div class="undo-smart-vars alert alert-info hide">
         <%= _('Undo remove') %>
       </div>
+      <div class='row'>
+        <div class='form-group col-md-12 text-right'>
+          <%= documentation_button('4.2.4SmartVariables') %>
+        </div>
+      </div>
       <div class="smart-var-left col-md-3">
         <ul class="nav nav-pills nav-stacked smart-var-tabs" data-tabs="pills">
-          <% @puppetclass.lookup_keys.each do |key| %>
+          <% @puppetclass.lookup_keys.includes(:lookup_values).each do |key| %>
             <li>
               <a data-toggle="tab" id="pill_<%= key.to_s.gsub(' ','_') + '_' + key.id.to_s %>" href="#<%= key.to_s.gsub(' ','_') + '_' + key.id.to_s %>" title="<%= key %>">
                 <div class="clip"><%= key %></div><span class="close pull-right">&times;</span>

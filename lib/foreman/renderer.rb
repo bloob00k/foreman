@@ -2,7 +2,6 @@ require 'tempfile'
 
 module Foreman
   module Renderer
-
     ALLOWED_HELPERS = [ :foreman_url, :grub_pass, :snippet, :snippets,
                         :snippet_if_exists, :ks_console, :root_pass,
                         :multiboot, :jumpstart_path, :install_path, :miniroot,
@@ -12,9 +11,7 @@ module Foreman
                           :repos, :dynamic, :kernel, :initrd,
                           :preseed_server, :preseed_path, :provisioning_type ]
 
-
     def render_safe(template, allowed_methods = [], allowed_vars = {})
-
       if Setting[:safemode_render]
         box = Safemode::Box.new self, allowed_methods
         box.eval(ERB.new(template, nil, '-').src, allowed_vars)
@@ -31,23 +28,33 @@ module Foreman
       protocol = config.scheme || 'http'
       host     = config.host || request.host
       port     = config.port || request.port
+      path     = config.path
 
       proxy = @host.try(:subnet).try(:tftp)
 
-      if proxy.present? && proxy.try(:features).map(&:name).include?('Templates') && @host.try(:token).present?
-        url = ProxyAPI::Template.new(:url => proxy.url).template_url
-        if url.nil?
-          logger.warn("unable to obtain template url set by proxy #{proxy.url}. falling back on proxy url.")
-          url = proxy.url
-        end
+      # use template_url from the request if set, but otherwise look for a Template
+      # feature proxy, as PXE templates are written without an incoming request.
+      url = if @template_url && @host.try(:token).present?
+              @template_url
+            elsif proxy.present? && proxy.try(:features).map(&:name).include?('Templates') && @host.try(:token).present?
+              temp_url = ProxyAPI::Template.new(:url => proxy.url).template_url
+              if temp_url.nil?
+                logger.warn("unable to obtain template url set by proxy #{proxy.url}. falling back on proxy url.")
+                temp_url = proxy.url
+              end
+              temp_url
+            end
+
+      if url.present?
         uri      = URI.parse(url)
         host     = uri.host
         port     = uri.port
         protocol = uri.scheme
+        path     = config.path
       end
 
       url_for :only_path => false, :controller => "/unattended", :action => action,
-              :protocol  => protocol, :host => host, :port => port,
+              :protocol  => protocol, :host => host, :port => port, :script_name => path,
               :token     => (@host.token.value unless @host.token.nil?)
     end
 
@@ -91,7 +98,7 @@ module Foreman
       content = template.respond_to?(:template) ? template.template : template
       template_name ||= template.respond_to?(:name) ? template.name : 'Unnamed'
       allowed_variables = ALLOWED_VARIABLES.reduce({}) do |mapping, var|
-         mapping.update(var => instance_variable_get("@#{var}"))
+        mapping.update(var => instance_variable_get("@#{var}"))
       end
       allowed_variables[:template_name] = template_name
       render_safe content, ALLOWED_HELPERS, allowed_variables
@@ -108,6 +115,5 @@ module Foreman
       end
       file
     end
-
   end
 end

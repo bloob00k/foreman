@@ -1,6 +1,5 @@
 module Foreman::Model
   class Rackspace < ComputeResource
-
     validates :user, :password, :region, :presence => true
     validate :ensure_valid_region
 
@@ -87,7 +86,7 @@ module Foreman::Model
     end
 
     def associated_host(vm)
-      Host.authorized(:view_hosts, Host).where(:ip => [vm.public_ip_address, vm.private_ip_address]).first
+      associate_by("ip", [vm.public_ip_address, vm.private_ip_address])
     end
 
     def user_data_supported?
@@ -110,9 +109,9 @@ module Foreman::Model
     def vm_instance_defaults
       #256 server
       super.merge(
-        :flavor_id => 1
+        :flavor_id => 1,
+        :config_drive => true
       )
     end
-
   end
 end

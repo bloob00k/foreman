@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class UserRoleTest < ActiveSupport::TestCase
-
   def setup
     User.current = users :admin
   end
@@ -15,7 +14,7 @@ class UserRoleTest < ActiveSupport::TestCase
 
   test "cache user roles" do
     user             = FactoryGirl.create :user
-    user_role        = FactoryGirl.create :user_user_role, :owner => user
+    FactoryGirl.create :user_user_role, :owner => user
     cached_user_roles = user.cached_user_roles.map(&:role)
 
     user.roles.each do |role|
@@ -53,7 +52,7 @@ class UserRoleTest < ActiveSupport::TestCase
 
     users = [@admin_user, @superadmin_user]
     users.each do |user|
-     assert_include user.cached_user_roles.map(&:role), user_role.role
+      assert_include user.cached_user_roles.map(&:role), user_role.role
     end
 
     users = @semiadmin_users

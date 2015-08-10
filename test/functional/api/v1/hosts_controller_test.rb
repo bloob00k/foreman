@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V1::HostsControllerTest < ActionController::TestCase
-
   def setup
     @host = FactoryGirl.create(:host)
   end
@@ -45,7 +44,6 @@ class Api::V1::HostsControllerTest < ActionController::TestCase
       post :create, { :host => valid_attrs }
     end
     assert_response :success
-    last_host = Host.order('id desc').last
   end
 
   test "should create host with managed is false if parameter is passed" do
@@ -84,7 +82,6 @@ class Api::V1::HostsControllerTest < ActionController::TestCase
   test "should allow access to restricted user who owns the host" do
     host = FactoryGirl.create(:host, :owner => users(:restricted))
     setup_user 'view', 'hosts', "owner_type = User and owner_id = #{users(:restricted).id}", :restricted
-    $debug = true
     get :show, { :id => host.to_param }
     assert_response :success
   end
@@ -164,5 +161,4 @@ class Api::V1::HostsControllerTest < ActionController::TestCase
     get :show, {:id => host.to_param}
     assert_response :success
   end
-
 end

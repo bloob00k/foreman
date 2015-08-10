@@ -4,7 +4,7 @@ class ImagesController < ApplicationController
 
   def index
     # Listing images in /hosts/new consumes this method as JSON
-    values = resource_base.where(:compute_resource_id => @compute_resource.id).search_for(params[:search], :order => params[:order])
+    values = resource_base.where(:compute_resource_id => @compute_resource.id).search_for(params[:search], :order => params[:order]).includes(:operatingsystem)
     respond_to do |format|
       format.html { @images = values.paginate :page => params[:page] }
       format.json { render :json => values }
@@ -49,5 +49,4 @@ class ImagesController < ApplicationController
   def find_compute_resource
     @compute_resource = ComputeResource.authorized(:view_compute_resources).find(params[:compute_resource_id])
   end
-
 end

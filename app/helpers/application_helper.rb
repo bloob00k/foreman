@@ -19,6 +19,8 @@ module ApplicationHelper
             id = 'not_defined'
           end
         rescue => e
+          logger.error e.message
+          logger.error e.backtrace.join("\n")
           id = 'not_parseable'
         end
         html_options.merge!(:'data-id' => "aid_#{id}")
@@ -28,6 +30,7 @@ module ApplicationHelper
   end
 
   protected
+
   def contract(model)
     model.to_label
   end
@@ -64,7 +67,6 @@ module ApplicationHelper
     text = remove_link_to_function(truncate(klass.name, :length => 28), functions_options)
     content_tag(:span, text, options).html_safe +
         remove_link_to_function('', functions_options.merge(:css_class => 'glyphicon glyphicon-minus-sign'))
-
   end
 
   def remove_link_to_function(text, options)
@@ -83,7 +85,6 @@ module ApplicationHelper
 
     content_tag(:span, text, options).html_safe +
         add_link_to_function('', function_options.merge(:css_class => 'glyphicon glyphicon-plus-sign'))
-
   end
 
   def add_link_to_function(text, options)
@@ -204,8 +205,9 @@ module ApplicationHelper
   end
 
   def auto_complete_search(name, val, options = {})
-    path = options[:path] || send("#{controller_name}_path")
-    options.merge!(:class => "autocomplete-input form-control", :'data-url' => "#{path}/auto_complete_#{name}" )
+    path = options[:full_path]
+    path ||= (options[:path] || send("#{controller_name}_path")) + "/auto_complete_#{name}"
+    options.merge!(:class => "autocomplete-input form-control", :'data-url' => path )
     text_field_tag(name, val, options)
   end
 
@@ -288,7 +290,7 @@ module ApplicationHelper
   end
 
   def action_buttons(*args)
-      toolbar_action_buttons args
+    toolbar_action_buttons args
   end
 
   def select_action_button(title, options = {}, *args)
@@ -302,10 +304,10 @@ module ApplicationHelper
 
     #multiple options
     content_tag(:div, options.merge(:class=>'btn-group')) do
-    link_to((title +" " +content_tag(:i, '', :class=>'caret')).html_safe,'#', :class=>"btn btn-default dropdown-toggle", :'data-toggle'=>'dropdown') +
-        content_tag(:ul,:class=>"dropdown-menu") do
-          args.map{|option| content_tag(:li,option)}.join(" ").html_safe
-        end
+      link_to((title +" " +content_tag(:i, '', :class=>'caret')).html_safe,'#', :class=>"btn btn-default dropdown-toggle", :'data-toggle'=>'dropdown') +
+          content_tag(:ul,:class=>"dropdown-menu") do
+            args.map{|option| content_tag(:li,option)}.join(" ").html_safe
+          end
     end
   end
 
@@ -384,7 +386,14 @@ module ApplicationHelper
     (obj.new_record? && obj.class.count > 0) || (!obj.new_record? && obj.class.count > 1)
   end
 
+  def documentation_button(section)
+    link_to(icon_text('question-sign', _('Documentation'), :class => 'icon-white'),
+            "http://www.theforeman.org/manuals/#{SETTINGS[:version].short}/index.html##{section}",
+            :rel => 'external', :class => 'btn btn-info', :target => '_blank')
+  end
+
   private
+
   def edit_inline(object, property, options = {})
     name       = "#{type}[#{property}]"
     helper     = options[:helper]
@@ -398,7 +407,5 @@ module ApplicationHelper
     content_tag_for :span, object, opts do
       h(value)
     end
-
   end
-
 end

@@ -1,17 +1,14 @@
 require 'test_helper'
 
 class Api::V2::HostsControllerTest < ActionController::TestCase
-
   def setup
     @host = FactoryGirl.create(:host)
   end
 
-  def valid_attrs
+  def basic_attrs
     { :name                => 'testhost11',
       :environment_id      => environments(:production).id,
       :domain_id           => domains(:mydomain).id,
-      :ip                  => '10.0.0.20',
-      :mac                 => '52:53:00:1e:85:93',
       :ptable_id           => ptables(:one).id,
       :medium_id           => media(:one).id,
       :architecture_id     => Architecture.find_by_name('x86_64').id,
@@ -22,6 +19,44 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
       :location_id         => taxonomies(:location1).id,
       :organization_id     => taxonomies(:organization1).id
     }
+  end
+
+  def valid_attrs
+    net_attrs = {
+      :ip  => '10.0.0.20',
+      :mac => '52:53:00:1e:85:93'
+    }
+    basic_attrs.merge(net_attrs)
+  end
+
+  def basic_attrs_with_profile(compute_attrs)
+    basic_attrs.merge(
+      :compute_resource_id => compute_attrs.compute_resource_id,
+      :compute_profile_id => compute_attrs.compute_profile_id
+    )
+  end
+
+  def nics_attrs
+    [{
+      :primary => true,
+      :ip => '10.0.0.20',
+      :mac => '00:11:22:33:44:00'
+    },{
+      :type => 'bmc',
+      :provider => 'IPMI',
+      :mac => '00:11:22:33:44:01'
+    },{
+      :mac => '00:11:22:33:44:02',
+      :_destroy => 1
+    }]
+  end
+
+  def expected_compute_attributes(compute_attrs, index)
+    compute_attrs.vm_interfaces[index].update("from_profile" => compute_attrs.compute_profile.name)
+  end
+
+  def last_host
+    Host.order('id asc').last
   end
 
   test "should get index" do
@@ -45,20 +80,82 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
       post :create, { :host => valid_attrs }
     end
     assert_response :success
-    last_host = Host.order('id desc').last
+  end
+
+  test "should create interfaces" do
+    disable_orchestration
+
+    post :create, { :host => basic_attrs.merge!(:interfaces_attributes => nics_attrs) }
+    assert_response :success
+    assert_equal 2, last_host.interfaces.count
+
+    assert last_host.interfaces.find_by_mac('00:11:22:33:44:00').primary?
+    assert_equal Nic::Managed, last_host.interfaces.find_by_mac('00:11:22:33:44:00').class
+    assert_equal Nic::BMC,     last_host.interfaces.find_by_mac('00:11:22:33:44:01').class
+  end
+
+  test "should create interfaces sent in a hash" do
+    disable_orchestration
+    hash_nics_attrs = nics_attrs.inject({}) do |hash, item|
+      hash.update(item.to_s => item)
+    end
+
+    post :create, { :host => basic_attrs.merge!(:interfaces_attributes => hash_nics_attrs) }
+    assert_response :success
+    assert_equal 2, last_host.interfaces.count
+
+    assert last_host.interfaces.find_by_mac('00:11:22:33:44:00').primary?
+    assert_equal Nic::Managed, last_host.interfaces.find_by_mac('00:11:22:33:44:00').class
+    assert_equal Nic::BMC,     last_host.interfaces.find_by_mac('00:11:22:33:44:01').class
+  end
+
+  test "should fail with unknown interface type" do
+    disable_orchestration
+
+    attrs = basic_attrs.merge!(:interfaces_attributes => nics_attrs)
+    attrs[:interfaces_attributes][0][:type] = "unknown"
+
+    post :create, { :host => attrs }
+    assert_response :unprocessable_entity
+    assert_match /Unknown interface type/, JSON.parse(response.body)['error']['message']
+  end
+
+  test "should create interfaces from compute profile" do
+    disable_orchestration
+
+    compute_attrs = compute_attributes(:with_interfaces)
+    post :create, { :host => basic_attrs_with_profile(compute_attrs).merge(:interfaces_attributes =>  nics_attrs) }
+    assert_response :success
+
+    assert_equal compute_attrs.vm_interfaces.count, last_host.interfaces.count
+    assert_equal expected_compute_attributes(compute_attrs, 0), last_host.interfaces.find_by_mac('00:11:22:33:44:00').compute_attributes
+    assert_equal expected_compute_attributes(compute_attrs, 1), last_host.interfaces.find_by_mac('00:11:22:33:44:01').compute_attributes
   end
 
   test "should create host with managed is false if parameter is passed" do
     disable_orchestration
     post :create, { :host => valid_attrs.merge!(:managed => false) }
     assert_response :success
-    last_host = Host.order('id desc').last
     assert_equal false, last_host.managed?
   end
 
   test "should update host" do
     put :update, { :id => @host.to_param, :host => { } }
     assert_response :success
+  end
+
+  test "should update interfaces from compute profile" do
+    disable_orchestration
+
+    compute_attrs = compute_attributes(:with_interfaces)
+
+    put :update, { :id => @host.to_param, :host => basic_attrs_with_profile(compute_attrs) }
+    assert_response :success
+
+    @host.interfaces.reload
+    assert_equal compute_attrs.vm_interfaces.count, @host.interfaces.count
+    assert_equal expected_compute_attributes(compute_attrs, 0), @host.interfaces.find_by_primary(true).compute_attributes
+    assert_equal expected_compute_attributes(compute_attrs, 1), @host.interfaces.find_by_primary(false).compute_attributes
   end
 
   test "should update host without :host root node and rails wraps it correctly" do
@@ -217,9 +314,9 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
     assert_response :unprocessable_entity
   end
 
-  test 'when ":restrict_registered_puppetmasters" is false, HTTP requests should be able to import facts' do
+  test 'when ":restrict_registered_smart_proxies" is false, HTTP requests should be able to import facts' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = false
+    Setting[:restrict_registered_smart_proxies] = false
     SETTINGS[:require_ssl] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
@@ -232,8 +329,8 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
 
   test 'hosts with a registered smart proxy on should import facts successfully' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = false
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = false
 
     proxy = smart_proxies(:puppetmaster)
     host   = URI.parse(proxy.url).host
@@ -247,8 +344,8 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
 
   test 'hosts without a registered smart proxy on should not be able to import facts' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = false
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['another.host'])
     hostname = fact_json['name']
@@ -259,8 +356,8 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
 
   test 'hosts with a registered smart proxy and SSL cert should import facts successfully' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
 
     @request.env['HTTPS'] = 'on'
     @request.env['SSL_CLIENT_S_DN'] = 'CN=else.where'
@@ -273,8 +370,8 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
 
   test 'hosts without a registered smart proxy but with an SSL cert should not be able to import facts' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
 
     @request.env['HTTPS'] = 'on'
     @request.env['SSL_CLIENT_S_DN'] = 'CN=another.host'
@@ -287,8 +384,8 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
 
   test 'hosts with an unverified SSL cert should not be able to import facts' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
 
     @request.env['HTTPS'] = 'on'
     @request.env['SSL_CLIENT_S_DN'] = 'CN=secure.host'
@@ -299,10 +396,10 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
     assert_response :forbidden
   end
 
-  test 'when "require_ssl_puppetmasters" and "require_ssl" are true, HTTP requests should not be able to import facts' do
+  test 'when "require_ssl_smart_proxies" and "require_ssl" are true, HTTP requests should not be able to import facts' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     SETTINGS[:require_ssl] = true
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
@@ -312,11 +409,11 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
     assert_response :forbidden
   end
 
-  test 'when "require_ssl_puppetmasters" is true and "require_ssl" is false, HTTP requests should be able to import facts' do
+  test 'when "require_ssl_smart_proxies" is true and "require_ssl" is false, HTTP requests should be able to import facts' do
     User.current = users(:one) #use an unprivileged user, not apiadmin
-    # since require_ssl_puppetmasters is only applicable to HTTPS connections, both should be set
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    # since require_ssl_smart_proxies is only applicable to HTTPS connections, both should be set
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     SETTINGS[:require_ssl] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
@@ -337,6 +434,7 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
 
   test "when the imported host failed to save, :unprocessable_entity is returned" do
     Host::Managed.any_instance.stubs(:save).returns(false)
+    Nic::Managed.any_instance.stubs(:save).returns(false)
     errors = ActiveModel::Errors.new(Host::Managed.new)
     errors.add :foo, 'A stub failure'
     Host::Managed.any_instance.stubs(:errors).returns(errors)
@@ -348,13 +446,28 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
     assert_equal 'A stub failure', JSON.parse(response.body)['error']['errors']['foo'].first
   end
 
+  test 'non-admin user with power_host permission can boot a vm' do
+    @bmchost = FactoryGirl.create(:host, :managed)
+    FactoryGirl.create(:nic_bmc, :host => @bmchost)
+    ProxyAPI::BMC.any_instance.stubs(:power).with(:action => 'status').returns("on")
+    role = FactoryGirl.create(:role, :name => 'power_hosts')
+    role.add_permissions!(['power_hosts'])
+    api_user = FactoryGirl.create(:user)
+    api_user.update_attribute :roles, [role]
+    as_user(api_user) do
+      put :power, { :id => @bmchost.to_param, :power_action => 'status' }
+    end
+    assert_response :success
+    assert @response.body =~ /on/
+  end
+
   context 'BMC proxy operations' do
     setup :initialize_proxy_ops
 
     def initialize_proxy_ops
       User.current = users(:apiadmin)
       @bmchost = FactoryGirl.create(:host, :managed)
-      nics(:bmc).update_attribute(:host_id, @bmchost.id)
+      FactoryGirl.create(:nic_bmc, :host => @bmchost)
     end
 
     test "power call to interface" do
@@ -393,7 +506,5 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
       assert_equal  1, response['subtotal']
       assert_equal @bmchost.name, response['search']
     end
-
   end
-
 end

@@ -1,7 +1,6 @@
 module Api
   module V2
     class HostsController < V2::BaseController
-
       wrap_parameters :host, :include => (Host::Base.attribute_names + ['image_file', 'is_owned_by', 'overwrite', 'progress_report_id'])
 
       include Api::Version2
@@ -11,7 +10,8 @@ module Api
       before_filter :find_optional_nested_object, :except => [:facts]
       before_filter :find_resource, :except => [:index, :create, :facts]
       before_filter :permissions_check, :only => %w{power boot puppetrun}
-      add_puppetmaster_filters :facts
+
+      add_smart_proxy_filters :facts, :features => FactImporter.fact_features
 
       api :GET, "/hosts/", N_("List all hosts")
       api :GET, "/hostgroups/:hostgroup_id/hosts", N_("List all hosts for a host group")
@@ -53,10 +53,10 @@ module Api
           param :subnet_id, :number, :desc => N_("required if host is managed and value is not inherited from host group")
           param :compute_resource_id, :number, :desc => N_("nil means host is bare metal")
           param :root_pass, String, :desc => N_("required if host is managed and value is not inherited from host group or default password in settings")
-          param :sp_subnet_id, :number
           param :model_id, :number
           param :hostgroup_id, :number
           param :owner_id, :number
+          param :owner_type, Host::Base::OWNER_TYPES, :desc => N_("Host's owner type")
           param :puppet_ca_proxy_id, :number
           param :image_id, :number
           param :host_parameters_attributes, Array
@@ -65,22 +65,28 @@ module Api
           param :provision_method, String
           param :managed, :bool, :desc => N_("True/False flag whether a host is managed or unmanaged. Note: this value also determines whether several parameters are required or not")
           param :progress_report_id, String, :desc => N_("UUID to track orchestration tasks status, GET /api/orchestration/:UUID/tasks")
+          param :comment, String, :desc => N_("Additional information about this host")
           param :capabilities, String
           param :compute_profile_id, :number
-          param :compute_attributes, Hash do
+          param :interfaces_attributes, Array, :desc => N_("Host's network interfaces.") do
+            param_group :interface_attributes, ::Api::V2::InterfacesController
           end
+          param :compute_attributes, Hash, :desc => N_("Additional compute resource specific attributes.")
         end
       end
-
 
       api :POST, "/hosts/", N_("Create a host")
       param_group :host, :as => :create
 
       def create
-        @host = Host.new(params[:host])
+        @host = Host.new(host_attributes(params[:host]))
         @host.managed = true if (params[:host] && params[:host][:managed].nil?)
+        merge_interfaces(@host)
+
         forward_request_url
         process_response @host.save
+      rescue InterfaceTypeMapper::UnknownTypeExeption => e
+        render_error :custom_error, :status => :unprocessable_entity, :locals => { :message => e.to_s }
       end
 
       api :PUT, "/hosts/:id/", N_("Update a host")
@@ -88,7 +94,12 @@ module Api
       param_group :host
 
       def update
-        process_response @host.update_attributes(params[:host])
+        @host.attributes = host_attributes(params[:host])
+        merge_interfaces(@host)
+
+        process_response @host.save
+      rescue InterfaceTypeMapper::UnknownTypeExeption => e
+        render_error :custom_error, :status => :unprocessable_entity, :locals => { :message => e.to_s }
       end
 
       api :DELETE, "/hosts/:id/", N_("Delete a host")
@@ -137,9 +148,9 @@ Return value may either be one of the following:
       def power
         valid_actions = PowerManager::SUPPORTED_ACTIONS
         if valid_actions.include? params[:power_action]
-          render :json => { :power => @host.power.send(params[:power_action]) }, :status => 200
+          render :json => { :power => @host.power.send(params[:power_action]) }, :status => :ok
         else
-          render :json => { :error => _("Unknown power action: available methods are %s") % valid_actions.join(', ') }, :status => 422
+          render :json => { :error => _("Unknown power action: available methods are %s") % valid_actions.join(', ') }, :status => :unprocessable_entity
         end
       end
 
@@ -150,9 +161,9 @@ Return value may either be one of the following:
       def boot
         valid_devices = ProxyAPI::BMC::SUPPORTED_BOOT_DEVICES
         if valid_devices.include? params[:device]
-          render :json => { :boot => @host.ipmi_boot(params[:device]) }, :status => 200
+          render :json => { :boot => @host.ipmi_boot(params[:device]) }, :status => :ok
         else
-          render :json => { :error => _("Unknown device: available devices are %s") % valid_devices.join(', ') }, :status => 422
+          render :json => { :error => _("Unknown device: available devices are %s") % valid_devices.join(', ') }, :status => :unprocessable_entity
         end
       end
 
@@ -170,6 +181,33 @@ Return value may either be one of the following:
       end
 
       private
+
+      def merge_interfaces(host)
+        merge = InterfaceMerge.new
+        merge.run(host.interfaces, host.compute_resource.try(:compute_profile_for, host.compute_profile_id))
+      end
+
+      def host_attributes(params)
+        return {} if params.nil?
+
+        params = params.deep_clone
+        if params[:interfaces_attributes]
+          # handle both hash and array styles of nested attributes
+          if params[:interfaces_attributes].is_a? Hash
+            params[:interfaces_attributes] = params[:interfaces_attributes].values
+          end
+          # map interface types
+          params[:interfaces_attributes] = params[:interfaces_attributes].map do |nic_attr|
+            interface_attributes(nic_attr)
+          end
+        end
+        params
+      end
+
+      def interface_attributes(params)
+        params[:type] = InterfaceTypeMapper.map(params[:type])
+        params
+      end
 
       def action_permission
         case params[:action]
@@ -195,7 +233,7 @@ Return value may either be one of the following:
 
       def detect_host_type
         return Host::Managed if params[:type].blank?
-        if params[:type].constantize.new.kind_of?(Host::Base)
+        if params[:type].constantize.new.is_a?(Host::Base)
           logger.debug "Creating host of type: #{params[:type]}"
           return params[:type].constantize
         else
@@ -207,10 +245,8 @@ Return value may either be one of the following:
 
       def permissions_check
         permission = "#{params[:action]}_hosts".to_sym
-        deny_access unless Host.authorized(permission).find(@host.id)
+        deny_access unless Host.authorized(permission, Host).find(@host.id)
       end
-
-      private
 
       def resource_class
         Host::Managed
@@ -219,7 +255,6 @@ Return value may either be one of the following:
       def allowed_nested_id
         %w(hostgroup_id location_id organization_id environment_id)
       end
-
     end
   end
 end

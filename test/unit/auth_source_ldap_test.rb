@@ -157,16 +157,40 @@ class AuthSourceLdapTest < ActiveSupport::TestCase
     setup_ldap_stubs
     ExternalUsergroup.any_instance.expects(:refresh).never
     LdapFluff.any_instance.expects(:group_list).with('test').returns([])
-    @auth_source_ldap.send(:update_usergroups, 'test', 'pass')
+    @auth_source_ldap.send(:update_usergroups, 'test')
   end
 
-  test 'update_usergroups calls refresh_ldap if entry belongs to some group' do
-    setup_ldap_stubs
-    ExternalUsergroup.expects(:find_by_name).with('ipausers').returns(ExternalUsergroup.new)
-    ExternalUsergroup.any_instance.expects(:present?).returns(true)
-    ExternalUsergroup.any_instance.expects(:refresh).returns(true)
-    LdapFluff.any_instance.expects(:group_list).with('test').returns(['ipausers'])
-    @auth_source_ldap.send(:update_usergroups, 'test', 'pass')
+  context 'refresh ldap' do
+    setup do
+      setup_ldap_stubs
+      LdapFluff.any_instance.expects(:group_list).with('test').returns(['ipausers'])
+    end
+
+    test 'update_usergroups calls refresh_ldap if entry belongs to some group' do
+      ExternalUsergroup.expects(:find_by_name).with('ipausers').returns(ExternalUsergroup.new)
+      @auth_source_ldap.send(:update_usergroups, 'test')
+    end
+
+    test 'update_usergroups refreshes on all external user groups, in LDAP and in Foreman auth source' do
+      @auth_source_ldap.stubs(:valid_group?).returns(true)
+      external = FactoryGirl.create(:external_usergroup, :auth_source => @auth_source_ldap)
+      User.any_instance.expects(:external_usergroups).returns([external])
+      @auth_source_ldap.send(:update_usergroups, 'test')
+    end
+  end
+
+  test 'update_usergroups is no-op with $login service account' do
+    ldap = FactoryGirl.build(:auth_source_ldap, :account => 'DOMAIN/$login')
+    User.any_instance.expects(:external_usergroups).never
+    ExternalUsergroup.any_instance.expects(:refresh).never
+    ldap.send(:update_usergroups, 'test')
+  end
+
+  test 'update_usergroups is no-op with usergroup_sync=false' do
+    ldap = FactoryGirl.build(:auth_source_ldap, :usergroup_sync => false)
+    User.any_instance.expects(:external_usergroups).never
+    ExternalUsergroup.any_instance.expects(:refresh).never
+    ldap.send(:update_usergroups, 'test')
   end
 
   test '#to_config with dedicated service account returns hash' do
@@ -191,6 +215,19 @@ class AuthSourceLdapTest < ActiveSupport::TestCase
     conf = FactoryGirl.build(:auth_source_ldap).to_config('user', 'pass')
     assert_kind_of Hash, conf
     assert conf[:anon_queries]
+  end
+
+  test '#to_config keeps encryption nil if tls is not used' do
+    AuthSourceLdap.any_instance.stubs(:tls => false)
+    conf = FactoryGirl.build(:auth_source_ldap).to_config('user', 'pass')
+    assert_nil conf[:encryption]
+  end
+
+  test '#to_config enforces verify_mode peer for tls' do
+    AuthSourceLdap.any_instance.stubs(:tls => true)
+    conf = FactoryGirl.build(:auth_source_ldap).to_config('user', 'pass')
+    assert_kind_of Hash, conf[:encryption]
+    assert_equal OpenSSL::SSL::VERIFY_PEER, conf[:encryption][:tls_options][:verify_mode]
   end
 
   test '#ldap_con does not cache connections with user auth' do
@@ -221,5 +258,4 @@ class AuthSourceLdapTest < ActiveSupport::TestCase
   def assigns_a_string_of_length_greater_than(length, method)
     @auth_source_ldap.send method, "this is010this is020this is030this is040this is050this is060this is070this is080this is090this is100this is110this is120this is130this is140this is150this is160this is170this is180this is190this is200this is210this is220this is230this is240this is250 and something else"
   end
-
 end

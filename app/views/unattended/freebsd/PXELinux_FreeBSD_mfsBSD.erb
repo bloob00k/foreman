@@ -4,8 +4,9 @@ name: FreeBSD (mfsBSD) PXELinux
 oses:
 - FreeBSD 10.0
 %>
-# foreman_url=<%= foreman_url %>
-default freebsd
-label freebsd
-kernel memdisk
-append initrd=<%= @initrd %> harddisk raw
+# foreman_url=<%= foreman_url('provision') %>
+DEFAULT freebsd
+
+LABEL freebsd
+    KERNEL memdisk
+    APPEND initrd=<%= @initrd %> harddisk raw

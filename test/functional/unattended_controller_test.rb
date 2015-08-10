@@ -17,11 +17,10 @@ class UnattendedControllerTest < ActionController::TestCase
                                     :medium => media(:ubuntu),
                                     :architecture => architectures(:x86_64)
                                    )
-      @host_with_template_subnet = FactoryGirl.create(:host, :managed, :with_dhcp_orchestration, :build => true,
+      @host_with_template_subnet = FactoryGirl.create(:host, :managed, :with_dhcp_orchestration, :with_tftp_subnet, :build => true,
                                     :operatingsystem => operatingsystems(:ubuntu1010),
                                     :ptable => ptables(:ubuntu),
                                     :medium => media(:ubuntu),
-                                    :subnet => FactoryGirl.create(:subnet, :tftp),
                                     :architecture => architectures(:x86_64)
                                    )
     end
@@ -43,6 +42,19 @@ class UnattendedControllerTest < ActionController::TestCase
   test "should get a kickstart even if we are behind a loadbalancer" do
     @request.env["HTTP_X_FORWARDED_FOR"] = @rh_host.ip
     @request.env["REMOTE_ADDR"] = "127.0.0.1"
+    get :provision
+    assert_response :success
+  end
+
+  test "should get a template from the provision interface" do
+    os = FactoryGirl.create(:debian7_0, :with_provision, :with_associations)
+    host = FactoryGirl.create(:host, :managed, :build => true, :operatingsystem => os,
+                              :interfaces => [
+                                FactoryGirl.build(:nic_managed, :primary => true),
+                                FactoryGirl.build(:nic_managed, :provision => true)
+                              ])
+
+    @request.env["REMOTE_ADDR"] = host.provision_interface.ip
     get :provision
     assert_response :success
   end
@@ -158,6 +170,7 @@ class UnattendedControllerTest < ActionController::TestCase
 
   test "should not provide unattened files to hosts which are not in built state" do
     @request.env["HTTP_X_RHN_PROVISIONING_MAC_0"] = "eth0 #{@rh_host.mac}"
+    @request.env['REMOTE_ADDR'] = '10.0.1.2'
     get :built
     assert_response :created
     get :provision
@@ -236,7 +249,6 @@ class UnattendedControllerTest < ActionController::TestCase
   end
 
   context "location or organizations are not enabled" do
-
     before do
       SETTINGS[:locations_enabled] = false
       SETTINGS[:organizations_enabled] = false
@@ -271,7 +283,7 @@ class UnattendedControllerTest < ActionController::TestCase
       refute_equal new_ip, h.ip
       h.create_token(:value => "aaaaab", :expires => Time.now + 5.minutes)
       get :built, {'token' => h.token.value }
-      h_new=Host.find_by_name(h.name)
+      h_new=Host.find_by_name(h.reload.name)
       assert_response :success
       assert_equal new_ip, h_new.ip
     end
@@ -285,7 +297,7 @@ class UnattendedControllerTest < ActionController::TestCase
       h.create_token(:value => "aaaaac", :expires => Time.now + 5.minutes)
       get :built, {'token' => h.token.value }
       assert_response :success
-      h_new=Host.find_by_name(h.name)
+      h_new=Host.find_by_name(h.reload.name)
       assert_equal h.ip, h_new.ip
     end
 
@@ -334,5 +346,4 @@ class UnattendedControllerTest < ActionController::TestCase
     get :provision
     assert_response :not_found
   end
-
 end

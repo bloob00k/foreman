@@ -13,7 +13,6 @@ class Subnet < ActiveRecord::Base
 
   validates_lengths_from_database :except => [:gateway]
   before_destroy EnsureNotUsedBy.new(:hosts, :hostgroups, :interfaces, :domains)
-  has_many_hosts
   has_many :hostgroups
   belongs_to :dhcp, :class_name => "SmartProxy"
   belongs_to :tftp, :class_name => "SmartProxy"
@@ -22,6 +21,9 @@ class Subnet < ActiveRecord::Base
   has_many :subnet_domains, :dependent => :destroy
   has_many :domains, :through => :subnet_domains
   has_many :interfaces, :class_name => 'Nic::Base'
+  has_many :primary_interfaces, :class_name => 'Nic::Base', :conditions => { :primary => true }
+  has_many :hosts, :through => :interfaces
+  has_many :primary_hosts, :through => :primary_interfaces, :source => :host
   validates :network, :mask, :name, :presence => true
   validates_associated    :subnet_domains
   validates :network, :uniqueness => true,
@@ -149,8 +151,8 @@ class Subnet < ActiveRecord::Base
     self.boot_mode == Subnet::BOOT_MODES[:dhcp]
   end
 
-  def unused_ip(mac = nil)
-    logger.debug "Not suggesting IP Address for #{to_s} as IPAM is disabled" and return unless ipam?
+  def unused_ip(mac = nil, excluded_ips = [])
+    logger.debug "Not suggesting IP Address for #{self} as IPAM is disabled" and return unless ipam?
     if self.ipam == IPAM_MODES[:dhcp] && dhcp?
       # we have DHCP proxy so asking it for free IP
       logger.debug "Asking #{dhcp.url} for free IP"
@@ -165,12 +167,12 @@ class Subnet < ActiveRecord::Base
       to = self.to.present? ? IPAddr.new(self.to) : subnet_range[-2]
       (from..to).each do |address|
         ip = address.to_s
-        unless self.known_ips.include?(ip)
+        if !self.known_ips.include?(ip) && !excluded_ips.include?(ip)
           logger.debug("Found #{ip}")
           return(ip)
         end
       end
-      logger.debug("Not suggesting IP Address for #{to_s} as no free IP found in our DB") and return
+      logger.debug("Not suggesting IP Address for #{self} as no free IP found in our DB") and return
     end
   rescue => e
     logger.warn "Failed to fetch a free IP from our proxy: #{e}"
@@ -178,7 +180,7 @@ class Subnet < ActiveRecord::Base
   end
 
   def known_ips
-    ips = self.interfaces.map(&:ip) + self.hosts.map(&:ip)
+    ips = self.interfaces.map(&:ip) + self.hosts.includes(:interfaces).map(&:ip)
     ips += [self.gateway, self.dns_primary, self.dns_secondary].select(&:present?)
     self.clear_association_cache
     ips.uniq
@@ -201,6 +203,16 @@ class Subnet < ActiveRecord::Base
 
   def has_vlanid?
     self.vlanid.present?
+  end
+
+  # overwrite method in taxonomix, since subnet is not direct association of host anymore
+  def used_taxonomy_ids(type)
+    return [] if new_record?
+    Host::Base.joins(:primary_interface).where(:nics => {:subnet_id => id}).pluck(type).compact.uniq
+  end
+
+  def as_json(options = {})
+    super({:methods => [:to_label]}.merge(options))
   end
 
   private
@@ -243,8 +255,6 @@ class Subnet < ActiveRecord::Base
   private
 
   def enc_attributes
-    @enc_attributes ||= %w(name network netmask gateway dns_primary dns_secondary from to boot_mode ipam)
+    @enc_attributes ||= %w(name network mask gateway dns_primary dns_secondary from to boot_mode ipam vlanid)
   end
-
-
 end

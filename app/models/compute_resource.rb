@@ -24,14 +24,13 @@ class ComputeResource < ActiveRecord::Base
   has_many :trends, :as => :trendable, :class_name => "ForemanTrend"
 
   before_destroy EnsureNotUsedBy.new(:hosts)
-  validates :name, :presence => true, :uniqueness => true,
-            :format => { :with => /\A(\S+)\Z/, :message => N_("can't contain white spaces.") }
+  validates :name, :presence => true, :uniqueness => true, :no_whitespace => true
   validate :ensure_provider_not_changed, :on => :update
   validates :provider, :presence => true, :inclusion => { :in => proc { self.providers } }
   validates :url, :presence => true
   scoped_search :on => :name, :complete_value => :true
   scoped_search :on => :type, :complete_value => :true
-  scoped_search :on => :id, :complete_value => :true
+  scoped_search :on => :id, :complete_enabled => false, :only_explicit => true
   before_save :sanitize_url
   has_many_hosts
   has_many :images, :dependent => :destroy
@@ -94,7 +93,7 @@ class ComputeResource < ActiveRecord::Base
 
   def save_vm(uuid, attr)
     vm = find_vm_by_uuid(uuid)
-    vm.attributes.merge!(attr.symbolize_keys)
+    vm.attributes.merge!(attr.deep_symbolize_keys)
     vm.save
   end
 
@@ -115,10 +114,14 @@ class ComputeResource < ActiveRecord::Base
     :image_id
   end
 
+  def interfaces_attrs_name
+    "interfaces"
+  end
+
   # returns a new fog server instance
   def new_vm(attr = {})
     test_connection
-    client.servers.new vm_instance_defaults.merge(attr.to_hash.symbolize_keys) if errors.empty?
+    client.servers.new vm_instance_defaults.merge(attr.to_hash.deep_symbolize_keys) if errors.empty?
   end
 
   # return fog new interface ( network adapter )
@@ -144,7 +147,7 @@ class ComputeResource < ActiveRecord::Base
   end
 
   def create_vm(args = {})
-    options = vm_instance_defaults.merge(args.to_hash.symbolize_keys)
+    options = vm_instance_defaults.merge(args.to_hash.deep_symbolize_keys)
     logger.debug("creating VM with the following options: #{options.inspect}")
     client.servers.create options
   end
@@ -221,19 +224,23 @@ class ComputeResource < ActiveRecord::Base
     raise ::Foreman::Exception.new(N_("Not implemented for %s"), provider_friendly_name)
   end
 
-  # this method is overwritten for Libvirt and VMWare
+  # this method is overwritten for Libvirt and VMware
   def set_console_password?
     false
   end
   alias_method :set_console_password, :set_console_password?
 
-  # this method is overwritten for Libvirt and VMWare
+  # this method is overwritten for Libvirt and VMware
   def set_console_password=(setpw)
     self.attrs[:setpw] = nil
   end
 
+  def compute_profile_for(id)
+    compute_attributes.find_by_compute_profile_id(id)
+  end
+
   def compute_profile_attributes_for(id)
-    compute_attributes.find_by_compute_profile_id(id).try(:vm_attrs) || {}
+    compute_profile_for(id).try(:vm_attrs) || {}
   end
 
   def vm_compute_attributes_for(uuid)
@@ -243,6 +250,10 @@ class ComputeResource < ActiveRecord::Base
 
   def user_data_supported?
     false
+  end
+
+  def image_exists?(image)
+    true
   end
 
   protected
@@ -263,16 +274,24 @@ class ComputeResource < ActiveRecord::Base
   def nested_attributes_for(type, opts)
     return [] unless opts
     opts = opts.dup #duplicate to prevent changing the origin opts.
-    opts.delete("new_#{type}") # delete template
+    opts.delete("new_#{type}") || opts.delete("new_#{type}".to_sym) # delete template
     # convert our options hash into a sorted array (e.g. to preserve nic / disks order)
-    opts = opts.sort { |l, r| l[0].sub('new_','').to_i <=> r[0].sub('new_','').to_i }.map { |e| Hash[e[1]] }
+    opts = opts.sort { |l, r| l[0].to_s.sub('new_','').to_i <=> r[0].to_s.sub('new_','').to_i }.map { |e| Hash[e[1]] }
     opts.map do |v|
       if v[:"_delete"] == '1'  && v[:id].blank?
         nil
       else
-        v.symbolize_keys # convert to symbols deeper hashes
+        v.deep_symbolize_keys # convert to symbols deeper hashes
       end
     end.compact
+  end
+
+  def associate_by(name, attributes)
+    Host.authorized(:view_hosts, Host).joins(:primary_interface).
+      where(:nics => {:primary => true}).
+      where("nics.#{name}" => attributes).
+      readonly(false).
+      first
   end
 
   private
@@ -286,5 +305,4 @@ class ComputeResource < ActiveRecord::Base
       errors.add(:provider, _("cannot be changed"))
     end
   end
-
 end

@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V2::UsersControllerTest < ActionController::TestCase
-
   valid_attrs = { :login => "johnsmith",
                   :mail => 'john@example.com',
                   :auth_source_id => AuthSourceInternal.first.id,
@@ -49,6 +48,14 @@ class Api::V2::UsersControllerTest < ActionController::TestCase
     assert mod_user.login == "johnsmith"
   end
 
+  test "should update admin flag" do
+    user = users(:one)
+    put :update, { :id => user.id, :user => { :admin => true } }
+
+    assert_response :success
+    assert User.find_by_id(user.id).admin?
+  end
+
   test "should not remove the anonymous role" do
     user = User.create :login => "foo", :mail => "foo@bar.com", :auth_source => auth_sources(:one)
 
@@ -72,7 +79,6 @@ class Api::V2::UsersControllerTest < ActionController::TestCase
 
     mod_user = User.find_by_id(user.id)
     assert mod_user.matching_password?("dummy")
-
   end
 
   test "should detect password validation mismatches" do
@@ -159,5 +165,4 @@ class Api::V2::UsersControllerTest < ActionController::TestCase
     get :show, { :id => users(:anonymous).id }
     assert_response :not_found
   end
-
 end

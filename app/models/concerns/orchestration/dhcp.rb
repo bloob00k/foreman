@@ -8,12 +8,15 @@ module Orchestration::DHCP
   end
 
   def dhcp?
-    hostname.present? && ip_available? && mac_available? && !subnet.nil? && subnet.dhcp? && managed?
+    # host.managed? and managed? should always come first so that orchestration doesn't
+    # even get tested for such objects
+    (host.nil? || host.managed?) && managed? && hostname.present? && ip_available? && mac_available? &&
+        !subnet.nil? && subnet.dhcp? && SETTINGS[:unattended] && (!provision? || operatingsystem.present?)
   end
 
   def dhcp_record
     return unless dhcp? or @dhcp_record
-    @dhcp_record ||= jumpstart? ? Net::DHCP::SparcRecord.new(dhcp_attrs) : Net::DHCP::Record.new(dhcp_attrs)
+    @dhcp_record ||= (provision? && jumpstart?) ? Net::DHCP::SparcRecord.new(dhcp_attrs) : Net::DHCP::Record.new(dhcp_attrs)
   end
 
   protected
@@ -56,15 +59,24 @@ module Orchestration::DHCP
 
   # returns a hash of dhcp record settings
   def dhcp_attrs
-    return unless dhcp?
-    dhcp_attr = { :name => name, :filename => operatingsystem.boot_filename(self),
-                  :ip => ip, :mac => mac, :hostname => hostname, :proxy => subnet.dhcp_proxy,
-                  :network => subnet.network, :nextServer => boot_server }
+    raise ::Foreman::Exception.new(N_("DHCP not supported for this NIC")) unless dhcp?
+    dhcp_attr = {
+      :name => name,
+      :hostname => hostname,
+      :ip => ip,
+      :mac => mac,
+      :proxy => subnet.dhcp_proxy,
+      :network => subnet.network,
+    }
 
-    if jumpstart?
-      jumpstart_arguments = os.jumpstart_params self, model.vendor_class
-      dhcp_attr.merge! jumpstart_arguments unless jumpstart_arguments.empty?
+    if provision?
+      dhcp_attr.merge!({:filename => operatingsystem.boot_filename(self), :nextServer => boot_server})
+      if jumpstart?
+        jumpstart_arguments = os.jumpstart_params self, model.vendor_class
+        dhcp_attr.merge! jumpstart_arguments unless jumpstart_arguments.empty?
+      end
     end
+
     dhcp_attr
   end
 
@@ -78,7 +90,6 @@ module Orchestration::DHCP
     logger.debug "Scheduling new DHCP reservations for #{self}"
     queue.create(:name   => _("Create DHCP Settings for %s") % self, :priority => 10,
                  :action => [self, :set_dhcp]) if dhcp?
-
   end
 
   def queue_dhcp_update
@@ -97,10 +108,10 @@ module Orchestration::DHCP
     return true if ((old.ip != ip) or (old.hostname != hostname) or (old.mac != mac) or (old.subnet != subnet))
     # Handle jumpstart
     #TODO, abstract this way once interfaces are fully used
-    if self.kind_of?(Host::Base) and jumpstart?
+    if self.is_a?(Host::Base) and jumpstart?
       if !old.build? or (old.medium != medium or old.arch != arch) or
           (os and old.os and (old.os.name != os.name or old.os != os))
-          return true
+        return true
       end
     end
     false
@@ -143,5 +154,4 @@ module Orchestration::DHCP
     end
     false
   end
-
 end

@@ -5,6 +5,7 @@ module Api
 
       before_filter :find_resource, :only => [:show, :update, :destroy, :refresh]
       before_filter :find_required_nested_object, :only => [:index, :show, :create]
+      after_filter :refresh_external_usergroup, :only => [:create, :update, :destroy]
 
       api :GET, '/usergroups/:usergroup_id/external_usergroups', N_('List all external user groups for user group')
       api :GET, '/auth_source_ldaps/:auth_source_ldap_id/external_usergroups', N_('List all external user groups for LDAP authentication source')
@@ -55,7 +56,6 @@ module Api
         process_response @external_usergroup.refresh
       end
 
-
       api :DELETE, '/usergroups/:usergroup_id/external_usergroups/:id', N_('Delete an external user group')
       param :usergroup_id, String, :required => true, :desc => N_('ID or name of user group')
       param :id, String, :required => true, :desc => N_('ID or name external user group')
@@ -77,6 +77,10 @@ module Api
 
       def allowed_nested_id
         %w(usergroup_id auth_source_ldap_id)
+      end
+
+      def refresh_external_usergroup
+        @external_usergroup.refresh
       end
     end
   end

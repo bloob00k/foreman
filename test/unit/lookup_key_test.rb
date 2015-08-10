@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class LookupKeyTest < ActiveSupport::TestCase
-
   def setup
     @host1, @host2, @host3 = FactoryGirl.create_list(:host, 3,
                                :location      => taxonomies(:location1),
@@ -80,6 +79,8 @@ class LookupKeyTest < ActiveSupport::TestCase
       key    = LookupKey.create!(:key => "dns", :path => "environment,hostgroup \n hostgroup", :puppetclass => puppetclass, :default_value => default, :override=>true)
       value1 = LookupValue.create!(:value => "v1", :match => "environment=testing,hostgroup=Common", :lookup_key => key)
       value2 = LookupValue.create!(:value => "v2", :match => "hostgroup=Unusual", :lookup_key => key)
+
+      LookupValue.create!(:value => "v22", :match => "fqdn=#{@host2.fqdn}", :lookup_key => key)
       EnvironmentClass.create!(:puppetclass => puppetclass, :environment => environments(:testing), :lookup_key => key)
       HostClass.create!(:host => @host1,:puppetclass=>puppetclass)
       HostClass.create!(:host => @host2,:puppetclass=>puppetclass)
@@ -91,6 +92,8 @@ class LookupKeyTest < ActiveSupport::TestCase
     assert_equal value1.value, Classification::ClassParam.new(:host=>@host1).enc['apache']['dns']
     assert_equal value2.value, Classification::ClassParam.new(:host=>@host2).enc['apache']['dns']
     assert_equal default, Classification::ClassParam.new(:host=>@host3).enc['apache']['dns']
+    assert key.overridden?(@host2)
+    refute key.overridden?(@host1)
   end
 
   def test_parameters_multiple_paths
@@ -199,5 +202,30 @@ class LookupKeyTest < ActiveSupport::TestCase
                             :default_value => [], :puppetclass => puppetclasses(:one))
     refute_valid key
     assert_equal key.errors[:avoid_duplicates].first, _("can only be set for arrays that have merge_overrides set to true")
+  end
+
+  test "should detect erb" do
+    key = FactoryGirl.build(:lookup_key)
+    assert key.contains_erb?('<% object_id %>')
+    assert key.contains_erb?('<%= object_id %>')
+    assert key.contains_erb?('[<% object_id %>, <% self %>]')
+    refute key.contains_erb?('[1,2,3]')
+    refute key.contains_erb?('{a: "b"}')
+    refute key.contains_erb?('plain value')
+  end
+
+  test "array key is valid even with string value containing erb" do
+    key = FactoryGirl.build(:lookup_key, :as_smart_class_param,
+                            :override => true, :key_type => 'array', :merge_overrides => true, :avoid_duplicates => true,
+                            :default_value => '<%= [1,2,3] %>', :puppetclass => puppetclasses(:one))
+    assert key.valid?
+  end
+
+  test "array key is invalid with string value without erb" do
+    key = FactoryGirl.build(:lookup_key, :as_smart_class_param,
+                            :override => true, :key_type => 'array', :merge_overrides => true, :avoid_duplicates => true,
+                            :default_value => 'whatever', :puppetclass => puppetclasses(:one))
+    refute key.valid?
+    assert_include key.errors.keys, :default_value
   end
 end

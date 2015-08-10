@@ -2,7 +2,7 @@ class Solaris < Operatingsystem
   PXEFILES = {:initrd => "x86.miniroot", :kernel => "multiboot"}
 
   def file_prefix
-    "#{to_s}".gsub(/[\s\(\)]/,"-").gsub("--", "-").gsub(/-\Z/, "")
+    "#{self}".gsub(/[\s\(\)]/,"-").gsub("--", "-").gsub(/-\Z/, "")
   end
 
   # sets the prefix for the tftp files based on the OS
@@ -108,11 +108,11 @@ class Solaris < Operatingsystem
   end
 
   private
+
   def resolv_nfs_path(host, dir, domain)
     host += ".#{domain.name}" unless host =~ /\./
     # If host is already an IP then this works fine
     ip = domain.resolver.getaddress(host)
     "#{ip}:#{dir}"
   end
-
 end

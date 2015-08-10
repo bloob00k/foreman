@@ -1,11 +1,21 @@
-class ApplicationMailer < ActionMailer::Base
+require 'uri'
 
+class ApplicationMailer < ActionMailer::Base
   default :from => Setting[:email_reply_address] || "noreply@foreman.example.org"
+
+  def mail(headers = {}, &block)
+    if headers.present?
+      headers[:subject] = "#{Setting[:email_subject_prefix]} #{headers[:subject]}" if (headers[:subject] && !Setting[:email_subject_prefix].blank?)
+      headers['X-Foreman-Server'] = URI.parse(Setting[:foreman_url]).host unless Setting[:foreman_url].blank?
+    end
+    super
+  end
 
   private
 
   class GroupMail
     def initialize(emails)
+      ActiveSupport::Deprecation.warn 'GroupMail will be removed as mailers should not generate multiple messages, use MailNotification#deliver'
       @emails = emails
     end
 
@@ -21,13 +31,24 @@ class ApplicationMailer < ActionMailer::Base
   end
 
   def group_mail(users, options)
-    GroupMail.new(users.map do |user|
-      set_locale_for(user)
+    ActiveSupport::Deprecation.warn '#group_mail is replaced by MailNotification#deliver with :users in the options hash, this does not function properly'
+
+    mails = users.map do |user|
+      @user = user
+      set_locale_for user
       mail(options.merge(:to => user.mail)) unless user.mail.blank?
-    end.compact)
+    end
+
+    GroupMail.new(mails.compact)
   end
 
   def set_locale_for(user)
-    FastGettext.set_locale(user.locale.blank? ? "en" : user.locale)
+    old_loc = FastGettext.locale
+    begin
+      FastGettext.set_locale(user.locale.blank? ? 'en' : user.locale)
+      yield if block_given?
+    ensure
+      FastGettext.locale = old_loc if block_given?
+    end
   end
 end

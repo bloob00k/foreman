@@ -3,7 +3,6 @@
 # friendly_id performs the logic if params[:id] is 'id' or 'id-name' or 'name'
 
 module FindCommon
-
   # example: @host = Host.find(params[:id])
   def find_resource
     not_found and return if params[:id].blank?
@@ -20,7 +19,7 @@ module FindCommon
 
   def resource_scope(options = {})
     @resource_scope ||= begin
-      options[:controller] ||= controller_name
+      options[:controller] ||= controller_permission
       options[:permission] ||= "#{action_permission}_#{options[:controller]}"
       scope = resource_class.scoped
       if resource_class.respond_to?(:authorized)
@@ -30,5 +29,4 @@ module FindCommon
       end
     end
   end
-
 end

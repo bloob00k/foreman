@@ -6,11 +6,21 @@
       <li><a href="#template_type" data-toggle="tab"><%= _("Type") %></a></li>
       <li><a href="#template_associations" data-toggle="tab"><%= _("Association") %></a></li>
       <li><a id='history_tab' href="#history" data-toggle="tab"><%= _("History") %></a></li>
+      <% if show_location_tab? %>
+        <li><a href="#locations" data-toggle="tab"><%= _("Locations") %></a></li>
+      <% end %>
+      <% if show_organization_tab? %>
+        <li><a href="#organizations" data-toggle="tab"><%= _("Organizations") %></a></li>
+      <% end %>
     </ul>
 
     <div class="tab-content">
       <div class="tab-pane active" id="primary">
         <%= text_f f, :name, :disabled => @config_template.locked? %>
+
+        <% if show_default? %>
+          <%= checkbox_f f, :default, :label=>_('Default'), :help_block => default_template_description %>
+        <% end -%>
 
         <% if @config_template.locked? -%>
         <%= alert :class => 'alert-warning', :header => '',
@@ -104,6 +114,9 @@
           <%= render "combinations", :f => f %>
         </div>
       </div>
+
+      <%= render 'taxonomies/loc_org_tabs', :f => f, :obj => @config_template %>
+
       <%= submit_or_cancel f %>
     </div>
   <div class='exit-fullscreen hidden'>

@@ -3,11 +3,9 @@ class PuppetclassesController < ApplicationController
   include Foreman::Controller::AutoCompleteSearch
   before_filter :find_resource, :only => [:edit, :update, :destroy, :override]
   before_filter :setup_search_options, :only => :index
-  before_filter :reset_redirect_to_url, :only => :index
-  before_filter :store_redirect_to_url, :only => :edit
 
   def index
-    @puppetclasses = resource_base.search_for(params[:search], :order => params[:order]).includes(:environments, :hostgroups).paginate(:page => params[:page])
+    @puppetclasses = resource_base.search_for(params[:search], :order => params[:order]).includes(:config_group_classes, :class_params, :environments, :hostgroups).paginate(:page => params[:page])
     @hostgroups_authorizer = Authorizer.new(User.current, :collection => HostgroupClass.find_all_by_puppetclass_id(@puppetclasses.map(&:id)).compact.uniq.map(&:hostgroup_id))
   end
 
@@ -16,8 +14,7 @@ class PuppetclassesController < ApplicationController
 
   def update
     if @puppetclass.update_attributes(params[:puppetclass])
-      notice _("Successfully updated %s." % @puppetclass.to_s)
-      redirect_back_or_default(puppetclasses_url)
+      process_success
     else
       process_error
     end
@@ -65,7 +62,7 @@ class PuppetclassesController < ApplicationController
     else
       if params['host']
         @obj = Host::Base.find(params['host_id'])
-        unless @obj.kind_of?(Host::Managed)
+        unless @obj.is_a?(Host::Managed)
           @obj      = @obj.becomes(Host::Managed)
           @obj.type = "Host::Managed"
         end
@@ -80,19 +77,6 @@ class PuppetclassesController < ApplicationController
     @obj
   end
 
-  def reset_redirect_to_url
-    session[:redirect_to_url] = nil
-  end
-
-  def store_redirect_to_url
-    session[:redirect_to_url] ||= request.referer
-  end
-
-  def redirect_back_or_default(default)
-    redirect_to(session[:redirect_to_url] || default)
-    session[:redirect_to_url] = nil
-  end
-
   def action_permission
     case params[:action]
       when 'override'
@@ -101,5 +85,4 @@ class PuppetclassesController < ApplicationController
         super
     end
   end
-
 end

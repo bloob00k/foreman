@@ -26,6 +26,8 @@ class Taxonomy < ActiveRecord::Base
   before_validation :sanitize_ignored_types
   after_create :assign_default_templates
 
+  scoped_search :on => :description, :complete_enabled => :false, :only_explicit => true
+
   delegate :import_missing_ids, :inherited_ids, :used_and_selected_or_inherited_ids, :selected_or_inherited_ids,
            :non_inherited_ids, :used_or_inherited_ids, :used_ids, :to => :tax_host
 
@@ -72,11 +74,30 @@ class Taxonomy < ActiveRecord::Base
     end
   end
 
+  def self.enabled_taxonomies
+    %w(locations organizations).select { |taxonomy| SETTINGS["#{taxonomy}_enabled".to_sym] }
+  end
+
   def self.ignore?(taxable_type)
     Array.wrap(self.current).each{ |current|
       return true if current.ignore?(taxable_type)
     }
     false
+  end
+
+  # if taxonomy e.g. organization was not set by current context (e.g. Any organization)
+  # then we have to compute what this context mean for current user (in what organizations
+  # is he assigned to)
+  #
+  # if user is not assigned to any organization then empty array is returned which means
+  # that we should use all organizations
+  #
+  # if user is admin we we return the original value since it does not need any additional scoping
+  def self.expand(value)
+    if value.blank? && User.current.present? && !User.current.admin?
+      value = self.send("my_#{self.to_s.underscore.pluralize}").all
+    end
+    value
   end
 
   def ignore?(taxable_type)
@@ -101,6 +122,7 @@ class Taxonomy < ActiveRecord::Base
     new = super
     new.name = ""
     new.users             = users
+    new.environments      = environments
     new.smart_proxies     = smart_proxies
     new.subnets           = subnets
     new.compute_resources = compute_resources
@@ -159,8 +181,8 @@ class Taxonomy < ActiveRecord::Base
   end
 
   def assign_taxonomy_to_user
+    return if User.current.nil?
     return if User.current.admin
     TaxableTaxonomy.create(:taxonomy_id => self.id, :taxable_id => User.current.id, :taxable_type => 'User')
   end
-
 end

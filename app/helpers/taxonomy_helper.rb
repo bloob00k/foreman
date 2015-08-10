@@ -23,12 +23,12 @@ module TaxonomyHelper
   end
 
   def location_dropdown(count)
-      text = Location.current.nil? ? _("Any Location") : Location.current.to_label
-      if count == 1 && !User.current.admin?
-        link_to text, "#"
-      else
-        link_to(text, "#", :class => "dropdown-toggle", :'data-toggle'=>"dropdown")
-      end
+    text = Location.current.nil? ? _("Any Location") : Location.current.to_label
+    if count == 1 && !User.current.admin?
+      link_to text, "#"
+    else
+      link_to(text, "#", :class => "dropdown-toggle", :'data-toggle'=>"dropdown")
+    end
   end
 
   def taxonomy_single
@@ -41,6 +41,10 @@ module TaxonomyHelper
 
   def taxonomy_upcase
     _(controller_name.humanize.titleize)
+  end
+
+  def taxonomy_new
+    is_location? ? _("New Location") : _("New Organization")
   end
 
   def wizard_header(current, *args)
@@ -131,5 +135,4 @@ module TaxonomyHelper
     options[:label]    ||= _(label)
     multiple_selects f, label.downcase, taxonomy.authorized("assign_#{label.downcase}", taxonomy), selected_ids, options, options_html
   end
-
 end

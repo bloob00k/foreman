@@ -1,6 +1,5 @@
 module Foreman::Model
   class Libvirt < ComputeResource
-
     include ComputeResourceConsoleCommon
 
     validates :url, :format => { :with => URI.regexp }
@@ -18,6 +17,10 @@ module Foreman::Model
       super.merge({:mac => :mac})
     end
 
+    def interfaces_attrs_name
+      "nics"
+    end
+
     def capabilities
       [:build, :image]
     end
@@ -25,7 +28,9 @@ module Foreman::Model
     def find_vm_by_uuid(uuid)
       client.servers.get(uuid)
     rescue ::Libvirt::RetrieveError => e
-      raise(ActiveRecord::RecordNotFound)
+      logger.error e.message
+      logger.error e.backtrace.join("\n")
+      raise ActiveRecord::RecordNotFound
     end
 
     # we default to destroy the VM's storage as well.
@@ -45,10 +50,10 @@ module Foreman::Model
 
     # libvirt reports in KB
     def max_memory
-      hypervisor.memory * 1024
+      hypervisor.memory * Foreman::SIZE[:kilo]
     rescue => e
       logger.debug "unable to figure out free memory, guessing instead due to:#{e}"
-      16*1024*1024*1024
+      16*Foreman::SIZE[:giga]
     end
 
     def test_connection(options = {})
@@ -61,6 +66,11 @@ module Foreman::Model
 
     def new_nic(attr = { })
       client.nics.new attr
+    end
+
+    def new_interface(attr = {})
+      # fog compatibility
+      new_nic(attr)
     end
 
     def new_volume(attr = { })
@@ -88,7 +98,7 @@ module Foreman::Model
     def new_vm(attr = { })
       test_connection
       return unless errors.empty?
-      opts = vm_instance_defaults.merge(attr.to_hash).symbolize_keys
+      opts = vm_instance_defaults.merge(attr.to_hash).deep_symbolize_keys
 
       # convert rails nested_attributes into a plain hash
       [:nics, :volumes].each do |collection|
@@ -138,7 +148,7 @@ module Foreman::Model
     end
 
     def associated_host(vm)
-      Host.authorized(:view_hosts, Host).where(:mac => vm.mac).first
+      associate_by("mac", vm.mac)
     end
 
     protected
@@ -159,7 +169,7 @@ module Foreman::Model
 
     def vm_instance_defaults
       super.merge(
-        :memory     => 768*1024*1024,
+        :memory     => 768*Foreman::SIZE[:mega],
         :nics       => [new_nic],
         :volumes    => [new_volume],
         :display    => { :type     => display_type.downcase,

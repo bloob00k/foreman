@@ -1,6 +1,5 @@
 require 'facter'
 class Setting::General < Setting
-
   def self.load_defaults
     # Check the table exists
     return unless super
@@ -15,6 +14,7 @@ class Setting::General < Setting
         self.set('administrator', N_("The default administrator email address"), administrator),
         self.set('foreman_url', N_("URL where your Foreman instance is reachable (see also Provisioning > unattended_url)"), foreman_url),
         self.set('email_reply_address', N_("Email reply address for emails that Foreman is sending"), email_reply_address),
+        self.set('email_subject_prefix', N_("Prefix to add to all outgoing email"), '[foreman]'),
         self.set('send_welcome_email', N_("Send a welcome mail including username and URL to new users"), false),
         self.set('entries_per_page', N_("Number of records shown per page in Foreman"), 20),
         self.set('fix_db_cache', N_('Fix DB cache on next Foreman restart'), false),
@@ -30,7 +30,5 @@ class Setting::General < Setting
     end
 
     true
-
   end
-
 end

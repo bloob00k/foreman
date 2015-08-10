@@ -1,6 +1,5 @@
 require 'facter'
 class Setting::Provisioning < Setting
-
   def self.load_defaults
     # Check the table exists
     return unless super
@@ -9,9 +8,9 @@ class Setting::Provisioning < Setting
     lower_fqdn = fqdn.downcase
     unattended_url = "http://#{fqdn}"
 
-    ssl_cert     = "#{SETTINGS[:puppetvardir]}/ssl/certs/#{lower_fqdn}.pem"
-    ssl_ca_file  = "#{SETTINGS[:puppetvardir]}/ssl/certs/ca.pem"
-    ssl_priv_key = "#{SETTINGS[:puppetvardir]}/ssl/private_keys/#{lower_fqdn}.pem"
+    ssl_cert     = "#{SETTINGS[:puppetssldir]}/certs/#{lower_fqdn}.pem"
+    ssl_ca_file  = "#{SETTINGS[:puppetssldir]}/certs/ca.pem"
+    ssl_priv_key = "#{SETTINGS[:puppetssldir]}/private_keys/#{lower_fqdn}.pem"
 
     self.transaction do
       [
@@ -22,7 +21,7 @@ class Setting::Provisioning < Setting
         self.set('ssl_ca_file', N_( "SSL CA file that Foreman will use to communicate with its proxies"), ssl_ca_file),
         self.set('ssl_priv_key', N_("SSL Private Key file that Foreman will use to communicate with its proxies"), ssl_priv_key),
         self.set('manage_puppetca', N_("Foreman will automate certificate signing upon provision of new host"), true),
-        self.set('ignore_puppet_facts_for_provisioning', N_("Stop updating IP address and MAC values from Puppet facts"), false),
+        self.set('ignore_puppet_facts_for_provisioning', N_("Stop updating IP address and MAC values from Puppet facts (affects all interfaces)"), false),
         self.set('query_local_nameservers', N_("Foreman will query the locally configured resolver instead of the SOA/NS authorities"), false),
         self.set('remote_addr', N_("If Foreman is running behind Passenger or a remote load balancer, the IP should be set here. This is a regular expression, so it can support several load balancers, i.e: (10.0.0.1|127.0.0.1)"), "127.0.0.1"),
         self.set('token_duration', N_("Time in minutes installation tokens should be valid for, 0 to disable"), 60 * 6),
@@ -36,7 +35,5 @@ class Setting::Provisioning < Setting
     end
 
     true
-
   end
-
 end

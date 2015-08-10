@@ -4,15 +4,20 @@ inherit_from:
 
 AllCops:
   RunRailsCops: true # always run the rails cops
+  Exclude:
+    - 'db/schema.rb'
 
 # Don't enforce documentation
 Style/Documentation:
   Enabled: false
 
-# Need to support ruby 1.8
+# Support both ruby19 and hash_rockets
 Style/HashSyntax:
-  EnforcedStyle: hash_rockets
+  Enabled: false
+  SupportedStyles:
+    - ruby19
+    - hash_rockets
 
 Metrics/ClassLength:
   Exclude:
-   - 'test/**/*'
+    - 'test/**/*'

@@ -9,6 +9,7 @@ class ComputeResourceTest < ActiveSupport::TestCase
 
   test "password is saved encrypted when updated" do
     compute_resource = compute_resources(:one)
+    compute_resource.expects(:encryption_key).at_least_once.returns('25d224dd383e92a7e0c82b8bf7c985e815f34cf5')
     compute_resource.password = "123456"
     as_admin do
       assert compute_resource.save
@@ -19,6 +20,7 @@ class ComputeResourceTest < ActiveSupport::TestCase
 
   test "password is saved encrypted when created" do
     Fog.mock!
+    ComputeResource.any_instance.expects(:encryption_key).at_least_once.returns('25d224dd383e92a7e0c82b8bf7c985e815f34cf5')
     compute_resource = ComputeResource.new_provider(:name => "new12345", :provider => "EC2", :url => "eu-west-1",
                                                     :user => "username", :password => "abcdef")
     as_admin do
@@ -146,4 +148,26 @@ class ComputeResourceTest < ActiveSupport::TestCase
     refute_valid cr, :provider, "cannot be changed"
   end
 
+  test "description supports more than 255 characters" do
+    unless ActiveRecord::Base.connection.instance_values["config"][:adapter] == 'sqlite3'
+      # rails uses text(255) with sqlite
+      description = "a" * 300
+      assert (description.length > 255)
+      cr = compute_resources(:mycompute)
+      cr.description = description
+      assert_valid cr
+    end
+  end
+
+  test "#associate_by returns host by MAC attribute" do
+    host = FactoryGirl.create(:host, :mac => '11:22:33:44:55:1a')
+    cr = FactoryGirl.build(:compute_resource)
+    assert_equal host, as_admin { cr.send(:associate_by, 'mac', '11:22:33:44:55:1a') }
+  end
+
+  test "#associated_by returns read/write host" do
+    FactoryGirl.create(:host, :mac => '11:22:33:44:55:1a')
+    cr = FactoryGirl.build(:compute_resource)
+    refute as_admin { cr.send(:associate_by, 'mac', '11:22:33:44:55:1a') }.readonly?
+  end
 end

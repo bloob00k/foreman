@@ -40,6 +40,9 @@ Foreman::Application.configure do |app|
   # Enable threaded mode
   # config.threadsafe!
 
+  # Eager load all classes under lib directory
+  config.eager_load_paths += ["#{config.root}/lib"]
+
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation can not be found)
   config.i18n.fallbacks = true
@@ -60,6 +63,9 @@ Foreman::Application.configure do |app|
   # Defaults to Rails.root.join("public/assets")
   # config.assets.manifest = YOUR_PATH
 
+  # Should ANSI color codes be used when logging information
+  config.colorize_logging = SETTINGS[:colorize_logging]
+
   # Add the fonts path
   config.assets.paths << Rails.root.join('vendor', 'assets', 'fonts')
 
@@ -70,6 +76,9 @@ Foreman::Application.configure do |app|
   #  config.assets.precompile += %w()
   #
   javascript = %w(compute_resource
+                  compute_resources/libvirt/nic_info
+                  compute_resources/ovirt/nic_info
+                  compute_resources/vmware/nic_info
                   lookup_keys
                   config_template
                   ace/ace
@@ -83,7 +92,9 @@ Foreman::Application.configure do |app|
                   ace/keybinding-emacs
                   diff
                   host_edit
+                  host_edit_interfaces
                   hosts
+                  puppetclasses_or_envs_changed
                   jquery.cookie
                   host_checkbox
                   nfs_visibility
@@ -125,13 +136,15 @@ Foreman::Application.configure do |app|
   # Adds plugin assets to the application digests hash if a manifest file exists for a plugin
   config.after_initialize do
     app.railties.engines.each do |engine|
-      manifest_path = "#{engine.root}/public/assets/#{engine.engine_name}/manifest.yml"
+      [engine.root, app.root].each do |root_dir|
+        manifest_path = File.join(root_dir, "public/assets/#{engine.engine_name}/manifest.yml")
 
-      if File.file?(manifest_path)
-        assets = YAML.load_file(manifest_path)
+        if File.file?(manifest_path)
+          assets = YAML.load_file(manifest_path)
 
-        assets.each_pair do |file, digest|
-          config.assets.digests[file] = digest
+          assets.each_pair do |file, digest|
+            config.assets.digests[file] = digest
+          end
         end
       end
     end
@@ -145,5 +158,4 @@ Foreman::Application.configure do |app|
       end
     end
   end
-
 end

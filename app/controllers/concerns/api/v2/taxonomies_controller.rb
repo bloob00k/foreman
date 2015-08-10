@@ -14,6 +14,7 @@ module Api::V2::TaxonomiesController
   def_param_group :resource do
     param :resource, Hash, :required => true, :action_aware => true do
       param :name, String, :required => true
+      param :description, String, :required => false
       param :user_ids, Array, N_("User IDs"), :required => false
       param :smart_proxy_ids, Array, N_("Smart proxy IDs"), :required => false
       param :compute_resource_ids, Array, N_("Compute resource IDs"), :required => false
@@ -107,5 +108,4 @@ module Api::V2::TaxonomiesController
   def allowed_nested_id
     %w(domain_id compute_resource_id subnet_id environment_id hostgroup_id smart_proxy_id user_id medium_id organization_id location_id filter_id)
   end
-
 end

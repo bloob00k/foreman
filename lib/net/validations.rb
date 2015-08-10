@@ -1,6 +1,5 @@
 module Net
   module Validations
-
     IP_REGEXP  = /\A((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4}\z/
     MAC_REGEXP = /\A([a-f0-9]{1,2}:){5}[a-f0-9]{1,2}\z/i
     MAC_REGEXP_64BIT = /\A([a-f0-9]{1,2}:){19}[a-f0-9]{1,2}\z/i
@@ -79,6 +78,8 @@ module Net
           m.split("-").map { |nibble| "%02x" % ("0x" + nibble) }.join(":")
         when /\A([a-f0-9]{1,2}-){5}[a-f0-9]{1,2}\z/
           m.split("-").map { |nibble| "%02x" % ("0x" + nibble) }.join(":")
+        else
+          raise ArgumentError, "'#{mac}' is not a valid MAC address"
       end
     end
 

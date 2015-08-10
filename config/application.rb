@@ -1,7 +1,6 @@
 require File.expand_path('../boot', __FILE__)
 require 'apipie/middleware/checksum_in_headers'
 
-
 require 'rails/all'
 
 if File.exist?(File.expand_path('../../Gemfile.in', __FILE__))
@@ -21,7 +20,7 @@ else
     end
     Bundler.require(*Rails.groups(:assets => %w(development test)))
     if SETTINGS[:unattended]
-      %w[fog libvirt ovirt vmware gce].each do |group|
+      %w[ec2 fog libvirt ovirt vmware gce].each do |group|
         begin
           Bundler.require(group)
         rescue LoadError
@@ -32,11 +31,12 @@ else
   end
 end
 
-SETTINGS[:libvirt] = defined?(::Fog) && defined?(::Libvirt)
-SETTINGS[:ovirt] = defined?(::Fog) && defined?(::OVIRT)
-SETTINGS[:vmware] = defined?(::Fog) && defined?(::RbVmomi)
-SETTINGS[:gce] = defined?(::Fog) && defined?(::Google::APIClient::VERSION)
-SETTINGS[:openstack] = SETTINGS[:rackspace] = SETTINGS[:ec2] = !!defined?(::Fog)
+SETTINGS[:libvirt]   = defined?(::Fog) && defined?(::Libvirt)
+SETTINGS[:ovirt]     = defined?(::Fog) && defined?(::OVIRT)
+SETTINGS[:vmware]    = defined?(::Fog) && defined?(::RbVmomi)
+SETTINGS[:gce]       = defined?(::Fog) && defined?(::Google::APIClient::VERSION)
+SETTINGS[:ec2]       = !!defined?(::Fog::AWS)
+SETTINGS[:openstack] = SETTINGS[:rackspace] = !!defined?(::Fog)
 
 require File.expand_path('../../lib/foreman.rb', __FILE__)
 require File.expand_path('../../lib/timed_cached_store.rb', __FILE__)
@@ -66,7 +66,6 @@ module Foreman
     config.autoload_paths += Dir["#{config.root}/app/controllers/concerns"]
     config.autoload_paths += Dir[ Rails.root.join('app', 'models', 'power_manager') ]
     config.autoload_paths += Dir["#{config.root}/app/models/concerns"]
-    config.autoload_paths += Dir["#{config.root}/app/controllers/concerns"]
     config.autoload_paths += Dir["#{config.root}/app/services"]
     config.autoload_paths += Dir["#{config.root}/app/observers"]
     config.autoload_paths += Dir["#{config.root}/app/mailers"]
@@ -153,7 +152,7 @@ module Foreman
     Bundler.require(:console)
     Wirb.start
     Hirb.enable
-  rescue => e
+  rescue
     warn "Failed to load console gems, starting anyway"
   ensure
     puts "For some operations a user must be set, try User.current = User.first"

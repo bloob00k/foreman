@@ -148,12 +148,13 @@ class Role < ActiveRecord::Base
   end
 
 private
+
   def allowed_permissions
     @allowed_permissions ||= permission_names + Foreman::AccessControl.public_permissions.map(&:name)
   end
 
   def allowed_actions
-    @actions_allowed ||= allowed_permissions.inject([]) { |actions, permission| actions += Foreman::AccessControl.allowed_actions(permission) }.flatten
+    @actions_allowed ||= allowed_permissions.inject([]) { |actions, permission| actions + Foreman::AccessControl.allowed_actions(permission) }.flatten
   end
 
   def check_deletable

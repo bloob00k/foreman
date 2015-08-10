@@ -3,7 +3,6 @@ require 'foreman/exception'
 
 module Foreman::Model
   class Vmware < ComputeResource
-
     include ComputeResourceConsoleCommon
 
     validates :user, :password, :server, :datacenter, :presence => true
@@ -11,6 +10,10 @@ module Foreman::Model
 
     def self.model_name
       ComputeResource.model_name
+    end
+
+    def user_data_supported?
+      true
     end
 
     def capabilities
@@ -21,7 +24,7 @@ module Foreman::Model
       if opts[:eager_loading] == true
         super()
       else
-        #VMWare server loading is very slow
+        #VMware server loading is very slow
         #not using FOG models directly to save the time
         #and minimize the amount of time required (as we don't require all attributes by default when listing)
         FogExtensions::Vsphere::MiniServers.new(client, datacenter)
@@ -38,11 +41,11 @@ module Foreman::Model
     end
 
     def max_memory
-      16*1024*1024*1024
+      16*Foreman::SIZE[:giga]
     end
 
     def datacenters
-      client.datacenters.all
+      name_sort(client.datacenters.all)
     end
 
     def cluster(cluster)
@@ -50,28 +53,32 @@ module Foreman::Model
     end
 
     def clusters
-      dc.clusters
+      if dc.clusters.nil?
+        Rails.logger.info "Datacenter #{dc.try(:name)} returned zero clusters"
+        return []
+      end
+      dc.clusters.map(&:full_path).sort
     end
 
     def datastores(opts = {})
       if opts[:storage_domain]
-        dc.datastores.get(opts[:storage_domain])
+        name_sort(dc.datastores.get(opts[:storage_domain]))
       else
-        dc.datastores.all(:accessible => true)
+        name_sort(dc.datastores.all(:accessible => true))
       end
     end
 
     def folders
-      dc.vm_folders.sort_by{|f| f.path}
+      dc.vm_folders.sort_by{|f| [f.path, f.name]}
     end
 
     def networks(opts = {})
-      dc.networks.all(:accessible => true)
+      name_sort(dc.networks.all(:accessible => true))
     end
 
     def resource_pools(opts = {})
       cluster = cluster(opts[:cluster_id])
-      cluster.resource_pools.all(:accessible => true)
+      name_sort(cluster.resource_pools.all(:accessible => true))
     end
 
     def available_clusters
@@ -103,9 +110,9 @@ module Foreman::Model
 
     def scsi_controller_types
       {
+        "VirtualBusLogicController" => "Bus Logic Parallel",
         "VirtualLsiLogicController" => "LSI Logic Parallel",
         "VirtualLsiLogicSASController" => "LSI Logic SAS",
-        "VirtualBusLogicController" => "Bus Logic Parallel",
         "ParaVirtualSCSIController" => "VMware Paravirtual"
       }
     end
@@ -233,8 +240,8 @@ module Foreman::Model
         "darwin11_64Guest" => "Apple Mac OS X 10.7 (64-bit)",
         "darwin12_64Guest" => "Mac OS 10.8 (64-bit)",
         "darwin13_64Guest" => "Mac OS 10.9 (64-bit)",
-        "vmkernelGuest" => "VMWare ESX 4.x",
-        "vmkernel5Guest" => "VMWare ESXi 5.x",
+        "vmkernelGuest" => "VMware ESX 4.x",
+        "vmkernel5Guest" => "VMware ESXi 5.x",
         "otherGuest" => "Other (32-bit)",
         "otherGuest64" => "Other (64-bit)"
       }
@@ -265,7 +272,7 @@ module Foreman::Model
 
     def test_connection(options = {})
       super
-      if errors[:server].empty? and errors[:user].empty? and errors[:password].empty?
+      if errors[:server].empty? && errors[:user].empty? && errors[:password].empty?
         update_public_key options
         datacenters
       end
@@ -274,7 +281,7 @@ module Foreman::Model
     end
 
     def parse_args(args)
-      args = args.symbolize_keys
+      args = args.deep_symbolize_keys
 
       # convert rails nested_attributes into a plain, symbolized hash
       [:interfaces, :volumes].each do |collection|
@@ -311,6 +318,7 @@ module Foreman::Model
       return unless errors.empty?
 
       args = parse_networks(args)
+      args = args.with_indifferent_access
       if args[:image_id].present?
         clone_vm(args)
       else
@@ -318,14 +326,14 @@ module Foreman::Model
         vm.save
       end
     rescue Fog::Errors::Error => e
-      logger.error "Unhandled VMWare error: #{e.class}:#{e.message}\n " + e.backtrace.join("\n ")
+      logger.error "Unhandled VMware error: #{e.class}:#{e.message}\n " + e.backtrace.join("\n ")
       destroy_vm vm.id if vm
       raise e
     end
 
-    def new_vm(args)
+    def new_vm(args = {})
       args = parse_args args
-      opts = vm_instance_defaults.symbolize_keys.merge(args.symbolize_keys)
+      opts = vm_instance_defaults.symbolize_keys.merge(args.symbolize_keys).deep_symbolize_keys
       client.servers.new opts
     end
 
@@ -362,8 +370,10 @@ module Foreman::Model
         "memoryMB" => args[:memory_mb],
         "datastore" => args[:volumes].first[:datastore],
         "network_label" => args[:interfaces].first[:network],
+        "nic_type" => args[:interfaces].first[:type],
         "network_adapter_device_key" => network_adapter_device_key
       }
+      opts["customization_spec"] = client.cloudinit_to_customspec(args[:user_data]) if args[:user_data]
       client.servers.get(client.vm_clone(opts)['new_vm']['id'])
     end
 
@@ -410,11 +420,11 @@ module Foreman::Model
     end
 
     def associated_host(vm)
-      Host.authorized(:view_hosts, Host).where(:mac => vm.mac).first
+      associate_by("mac", vm.mac)
     end
 
     def self.provider_friendly_name
-      "VMWare"
+      "VMware"
     end
 
     private
@@ -465,7 +475,5 @@ module Foreman::Model
         :datacenter => datacenter
       )
     end
-
   end
 end
-

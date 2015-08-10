@@ -1,16 +1,14 @@
 module Api
   #TODO: inherit from application controller after cleanup
   class BaseController < ActionController::Base
-    include Foreman::Controller::Authentication
-    include Foreman::Controller::Session
-    include Foreman::ThreadSession::Cleaner
-    include FindCommon
+    include ApplicationShared
 
     protect_from_forgery
     skip_before_filter :verify_authenticity_token, :unless => :protect_api_from_forgery?
 
     before_filter :set_default_response_format, :authorize, :add_version_header, :set_gettext_locale
     before_filter :session_expiry, :update_activity_time
+    around_filter :set_timezone
 
     cache_sweeper :topbar_sweeper
 
@@ -33,14 +31,17 @@ module Api
       not_found
     }
 
-
     def get_resource
       instance_variable_get :"@#{resource_name}" or raise 'no resource loaded'
     end
 
+    def controller_permission
+      controller_name
+    end
+
     # overwrites resource_scope in FindCommon to consider nested objects
     def resource_scope(options = {})
-      options[:association] ||= controller_name
+      options[:association] ||= controller_permission
       if nested_obj && nested_obj.respond_to?(options[:association])
         association = nested_obj.send(options[:association])
         if association.respond_to?(:authorized)
@@ -186,6 +187,7 @@ module Api
     end
 
     private
+
     attr_reader :nested_obj
 
     def find_required_nested_object
@@ -206,7 +208,7 @@ module Api
           if allowed_nested_id.include?(param)
             model = md[1].classify.constantize
             controller = md[1].pluralize
-            authorized_scope = model.authorized("#{action_permission}_#{controller}")
+            authorized_scope = model.authorized("#{action_permission}_#{controller}", model)
             @nested_obj = begin
               authorized_scope.find(params[param])
             rescue ActiveRecord::RecordNotFound

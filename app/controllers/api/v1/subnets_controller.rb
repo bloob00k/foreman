@@ -1,7 +1,6 @@
 module Api
   module V1
     class SubnetsController < V1::BaseController
-
       before_filter :find_resource, :only => %w{show update destroy}
 
       api :GET, '/subnets', 'List of subnets'
@@ -76,7 +75,6 @@ module Api
       def destroy
         process_response @subnet.destroy
       end
-
     end
   end
 end

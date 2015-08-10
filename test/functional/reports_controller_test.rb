@@ -19,7 +19,7 @@ class ReportsControllerTest < ActionController::TestCase
   end
 
   def test_show_last
-    report = FactoryGirl.create(:report)
+    FactoryGirl.create(:report)
     get :show, {:id => "last"}, set_session_user
     assert_template 'show'
   end
@@ -76,5 +76,4 @@ class ReportsControllerTest < ActionController::TestCase
     get :index, {}, set_session_user
     assert_response :success
   end
-
 end

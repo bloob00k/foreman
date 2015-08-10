@@ -27,6 +27,8 @@ begin
   require 'fog/ovirt'
   require 'fog/ovirt/models/compute/server'
   Fog::Compute::Ovirt::Server.send(:include, FogExtensions::Ovirt::Server)
+  require 'fog/ovirt/models/compute/template'
+  Fog::Compute::Ovirt::Template.send(:include, FogExtensions::Ovirt::Template)
 
   require 'fog/ovirt/models/compute/volume'
   Fog::Compute::Ovirt::Volume.send(:include, FogExtensions::Ovirt::Volume)
@@ -44,6 +46,9 @@ begin
 
   require 'fog/vsphere/models/compute/folder'
   Fog::Compute::Vsphere::Folder.send(:include, FogExtensions::Vsphere::Folder)
+
+  require 'fog/vsphere/requests/compute/get_virtual_machine'
+  Fog::Compute::Vsphere::Real.send(:include, FogExtensions::Vsphere::Template)
 
   require 'fog/rackspace'
   require 'fog/rackspace/models/compute_v2/server'

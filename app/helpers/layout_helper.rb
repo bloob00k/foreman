@@ -17,11 +17,11 @@ module LayoutHelper
   end
 
   def stylesheet(*args)
-    content_for(:stylesheets) { stylesheet_link_tag(*args) }
+    content_for(:stylesheets) { stylesheet_link_tag(*args.push("data-turbolinks-track" => true)) }
   end
 
   def javascript(*args)
-    content_for(:javascripts) { javascript_include_tag(*args) }
+    content_for(:javascripts) { javascript_include_tag(*args.push("data-turbolinks-track" => true)) }
   end
 
   def addClass(options = {}, new_class = '')
@@ -69,7 +69,6 @@ module LayoutHelper
     end
   end
 
-
   def multiple_checkboxes(f, attr, klass, associations, options = {}, html_options = {})
     if associations.count > 5
       associated_obj = klass.send(ActiveModel::Naming.plural(associations.first))
@@ -114,6 +113,13 @@ module LayoutHelper
     end
   end
 
+  def time_zone_select_f(f, attr, default_timezone, select_options = {}, html_options = {})
+    field(f, attr, html_options) do
+      addClass html_options, "form-control"
+      f.time_zone_select(attr, [default_timezone], select_options, html_options)
+    end
+  end
+
   def selectable_f(f, attr, array, select_options = {}, html_options = {})
     html_options.merge!(:size => 'col-md-10') if html_options[:multiple]
     field(f, attr, html_options) do
@@ -130,13 +136,13 @@ module LayoutHelper
 
   def autocomplete_f(f, attr, options = {})
     field(f, attr, options) do
-      path = options.delete(:path) || send("#{f.object.class.pluralize.underscore}_path")
+      path = options.delete(:path) || send("#{f.object.class.pluralize.underscore}_path") if options[:full_path].nil?
       auto_complete_search(attr,
                            f.object.send(attr).try(:squeeze, " "),
                            options.merge(
                                :placeholder => _("Filter") + ' ...',
                                :path        => path,
-                               :name       => "#{f.object_name}[#{attr}]"
+                               :name        => "#{f.object_name}[#{attr}]"
                            )
       ).html_safe
     end
@@ -151,7 +157,6 @@ module LayoutHelper
     content_tag(:div, :class=> "clearfix") do
       content_tag :div, :class => "form-group #{error.empty? ? "" : 'has-error'}",
                   :id          => options.delete(:control_group_id) do
-
         required = options.delete(:required) # we don't want to use html5 required attr so we delete the option
         required_mark = ' *' if required.nil? ? is_required?(f, attr) : required
         label   = options[:label] == :none ? '' : options.delete(:label)
@@ -222,7 +227,7 @@ module LayoutHelper
   end
 
   def popover(title, msg, options = {})
-    link_to icon_text("info-sign", title), {}, { :remote => true, :rel => "popover", :data => {"content" => msg, "original-title" => title} }.merge(options)
+    content_tag(:a, icon_text("info-sign", title), { :rel => "popover", :data => {"content" => msg, "original-title" => title} }.merge(options))
   end
 
   def will_paginate(collection = nil, options = {})
@@ -301,7 +306,7 @@ module LayoutHelper
     "<button type='button' class='close' data-dismiss='#{data_dismiss}' aria-hidden='true'>&times;</button>".html_safe
   end
 
-  def trunc(text, length = 32)
+  def trunc_with_tooltip(text, length = 32)
     text    = text.to_s
     options = text.size > length ? { :'data-original-title' => text, :rel => 'twipsy' } : {}
     content_tag(:span, truncate(text, :length => length), options).html_safe
@@ -309,5 +314,12 @@ module LayoutHelper
 
   def modal_close(data_dismiss = 'modal', text = _('Close'))
     button_tag(text, :class => 'btn btn-default', :data => { :dismiss => data_dismiss })
+  end
+
+  def number_f(f, attr, options = {})
+    field(f, attr, options) do
+      addClass options, "form-control"
+      f.number_field attr, options
+    end
   end
 end

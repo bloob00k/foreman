@@ -16,7 +16,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 module Foreman #:nodoc:
-
   class PluginNotFound < Foreman::Exception; end
   class PluginRequirementError < Foreman::Exception; end
 
@@ -31,7 +30,6 @@ module Foreman #:nodoc:
   #   end
   #
   class Plugin
-
     @registered_plugins = {}
     @tests_to_skip = {}
     class << self
@@ -58,6 +56,7 @@ module Foreman #:nodoc:
           plugin.description gem.description
           plugin.url gem.homepage
           plugin.version gem.version.to_s
+          plugin.path gem.full_gem_path
         end
 
         plugin.instance_eval(&block)
@@ -89,13 +88,12 @@ module Foreman #:nodoc:
       end
     end
 
-    def_field :name, :description, :url, :author, :author_url, :version
+    def_field :name, :description, :url, :author, :author_url, :version, :path
     attr_reader :id
 
     def initialize(id)
       @id = id.to_sym
     end
-
 
     def <=>(plugin)
       self.id.to_s <=> plugin.id.to_s
@@ -235,6 +233,24 @@ module Foreman #:nodoc:
       else
         Rails.logger.warn "Ignoring override of FiltersHelper#search_path_override for '#{engine_name}': no override block is present"
       end
+    end
+
+    # list of API controller paths, globs allowed
+    def apipie_documented_controllers(controllers = nil)
+      if controllers
+        @apipie_documented_controllers = controllers
+        Apipie.configuration.api_controllers_matcher.concat(controllers)
+      end
+      @apipie_documented_controllers
+    end
+
+    # list of clontroller classnames that are ignored by apipie
+    def apipie_ignored_controllers(controllers = nil)
+      if controllers
+        @apipie_ignored_controllers = controllers
+        Apipie.configuration.ignored.concat(controllers)
+      end
+      @apipie_ignored_controllers
     end
   end
 end

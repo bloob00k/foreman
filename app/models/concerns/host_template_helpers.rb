@@ -32,24 +32,34 @@ module HostTemplateHelpers
     protocol = config.scheme || 'http'
     port     = config.port || request.port
     host     = config.host || request.host
+    path     = config.path
 
     @host ||= self
     proxy = @host.try(:subnet).try(:tftp)
 
-    if proxy.present? && proxy.try(:features).map(&:name).include?('Templates') && @host.try(:token).present?
-      url = ProxyAPI::Template.new(:url => proxy.url).template_url
-      if url.nil?
-        logger.warn("unable to obtain template url set by proxy #{proxy.url}. falling back on proxy url.")
-        url = proxy.url
-      end
+    # use template_url from the request if set, but otherwise look for a Template
+    # feature proxy, as PXE templates are written without an incoming request.
+    url = if @template_url && @host.try(:token).present?
+            @template_url
+          elsif proxy.present? && proxy.try(:features).map(&:name).include?('Templates') && @host.try(:token).present?
+            temp_url = ProxyAPI::Template.new(:url => proxy.url).template_url
+            if temp_url.nil?
+              logger.warn("unable to obtain template url set by proxy #{proxy.url}. falling back on proxy url.")
+              temp_url = proxy.url
+            end
+            temp_url
+          end
+
+    if url.present?
       uri      = URI.parse(url)
       host     = uri.host
       port     = uri.port
       protocol = uri.scheme
+      path     = config.path
     end
 
     url_for :only_path => false, :controller => "/unattended", :action => action,
-      :protocol  => protocol, :host => host, :port => port,
+      :protocol  => protocol, :host => host, :port => port, :script_name => path,
       :token     => (@host.token.value unless @host.token.nil?)
   end
 
@@ -62,5 +72,4 @@ module HostTemplateHelpers
     url_options[:host] = Setting[:foreman_url] if Setting[:foreman_url]
     url_options
   end
-
 end

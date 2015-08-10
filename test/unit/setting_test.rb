@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class SettingTest < ActiveSupport::TestCase
-
   def setup
     Setting.cache.clear
   end
@@ -97,7 +96,7 @@ class SettingTest < ActiveSupport::TestCase
 
   def test_create_exclamation_with_missing_attrs_raises_exception
     assert_raises(ActiveRecord::RecordInvalid) do
-      setting = Setting.create!(:name => "foo")
+      Setting.create!(:name => "foo")
     end
   end
 
@@ -129,7 +128,7 @@ class SettingTest < ActiveSupport::TestCase
   end
 
   def test_attributes_in_SETTINGS_are_readonly
-    setting_name = "foo_#{rand(1000000).to_s}"
+    setting_name = "foo_#{rand(1000000)}"
     Setting.create!(:name => setting_name, :value => "bar", :default => "default", :description => "foo")
     SETTINGS[setting_name.to_sym] = "no-bar"
 
@@ -138,7 +137,7 @@ class SettingTest < ActiveSupport::TestCase
   end
 
   def test_value_is_updated_after_change_in_SETTINGS
-    setting_name = "foo_#{rand(1000000).to_s}"
+    setting_name = "foo_#{rand(1000000)}"
     Setting.create!(:name => setting_name, :value => "bar", :default => "default", :description => "foo")
 
     SETTINGS.stubs(:key?).with(setting_name.to_sym).returns(true)
@@ -169,7 +168,6 @@ class SettingTest < ActiveSupport::TestCase
     check_properties_saved_and_loaded_ok :name => "foo", :value => "  value  ", :default => "default", :description => "test foo"
   end
 
-
   # tests for choosing correct type
   def test_should_autoselect_correct_type_for_integer_value
     check_correct_type_for "integer", 5
@@ -192,7 +190,6 @@ class SettingTest < ActiveSupport::TestCase
     check_correct_type_for "boolean", false
   end
 
-
   # tests for caching
   def test_returns_value_from_cache
     check_value_returns_from_cache_with :name => "test_cache", :default => 1, :value => 2, :description => "test foo"
@@ -206,7 +203,6 @@ class SettingTest < ActiveSupport::TestCase
     check_value_returns_from_cache_with :name => "test_cache", :default => true, :value => true, :description => "test foo"
   end
 
-
   # tests for default type constraints
   test "arrays cannot be empty by default" do
     check_setting_did_not_save_with :name => "foo", :value => [], :default => ["a", "b", "c"], :description => "test foo"
@@ -219,7 +215,6 @@ class SettingTest < ActiveSupport::TestCase
   test "integer attributes can be zero by default" do
     check_properties_saved_and_loaded_ok :name => "foo83", :value => 0, :default => 0, :description => "test foo"
   end
-
 
   # test particular settings
   test "idle_timeout should not be zero" do
@@ -314,6 +309,11 @@ class SettingTest < ActiveSupport::TestCase
     end
   end
 
+  test "create succeeds when cache is non-functional" do
+    Setting.cache.expects(:delete).with('test_broken_cache').returns(false)
+    assert_valid Setting.create!(:name => 'test_broken_cache', :description => 'foo', :default => 'default')
+  end
+
   private
 
   def check_parsed_value(settings_type, expected_value, string_value)
@@ -382,8 +382,8 @@ class SettingTest < ActiveSupport::TestCase
   end
 
   def check_setting_did_not_save_with(options = {})
-     setting = Setting.new(options)
-     assert !setting.save
+    setting = Setting.new(options)
+    assert !setting.save
   end
 
   def check_value_returns_from_cache_with(options = {})
@@ -403,5 +403,4 @@ class SettingTest < ActiveSupport::TestCase
     Setting[name] = options[:value]
     assert_nil Rails.cache.read(name)
   end
-
 end

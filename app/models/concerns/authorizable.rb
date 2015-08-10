@@ -22,9 +22,26 @@ module Authorizable
       end
     }
 
-    def self.authorized(permission = nil, resource = nil)
-      self.authorized_as(User.current, permission, resource)
-    end
+    # joins to another class, on which the authorization is applied
+    #
+    # permission can be nil (therefore we use Proc instead of lambda)
+    #
+    # e.g.
+    #   Report.joins_authorized_as(user, Host, :view_hosts)
+    #   Host.joins_authorized_as(user, Domain, :view_domains)
+    #
+    # Or you may simply use authorized for User.current
+    #
+    # The default scope of `resource` is NOT applied since it's a join, instead
+    # any extra conditions can be given in `opts[:where]`.
+    #
+    scope :joins_authorized_as, Proc.new { |user, resource, permission, opts = {}|
+      if user.nil?
+        self.where('1=0')
+      else
+        Authorizer.new(user).find_collection(resource, {:permission => permission, :joined_on => self}.merge(opts) )
+      end
+    }
 
     def authorized?(permission)
       return false if User.current.nil?
@@ -43,6 +60,14 @@ module Authorizable
 
     def allows_location_filtering?
       allows_taxonomy_filtering?(:location_id)
+    end
+
+    def authorized(permission = nil, resource = nil)
+      authorized_as(User.current, permission, resource)
+    end
+
+    def joins_authorized(resource, permission = nil, opts = {})
+      joins_authorized_as(User.current, resource, permission, opts)
     end
   end
 end

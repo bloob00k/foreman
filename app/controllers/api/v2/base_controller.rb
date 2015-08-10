@@ -112,7 +112,7 @@ module Api
       def append_array_of_ids(hash_params)
         model_name = controller_name.singularize
         hash_params.dup.each do |k,v|
-          if v.kind_of?(Array)
+          if v.is_a?(Array)
             association_name_ids = "#{k.singularize}_ids"
             association_name_names = "#{k.singularize}_names"
             if resource_class.instance_methods.map(&:to_s).include?(association_name_ids) && v.any? && v.all? { |a| a.keys.include?("id") }
@@ -134,7 +134,7 @@ module Api
 
       def check_content_type
         if (request.post? || request.put?) && request.content_type != "application/json"
-          render_error(:unsupported_content_type, :status => 415)
+          render_error(:unsupported_content_type, :status => :unsupported_media_type)
         end
       end
 
@@ -153,7 +153,6 @@ module Api
         # re-enable json root element
         ActiveRecord::Base.include_root_in_json = true
       end
-
     end
   end
 end

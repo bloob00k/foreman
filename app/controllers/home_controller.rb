@@ -18,6 +18,7 @@ class HomeController < ApplicationController
   end
 
   private
+
   # check for exception - set the result code and duration time
   def exception_watch(&block)
     start = Time.now
@@ -25,12 +26,12 @@ class HomeController < ApplicationController
     begin
       yield
       result[:result] = 'ok'
-      result[:status] = 200
+      result[:status] = :ok
       result[:version] = SETTINGS[:version].full
       result[:db_duration_ms] = ((Time.now - start) * 1000).round.to_s
     rescue => e
       result[:result] = 'fail'
-      result[:status] = 500
+      result[:status] = :internal_server_error
       result[:message] = e.message
     end
     result

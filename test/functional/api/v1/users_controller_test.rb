@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V1::UsersControllerTest < ActionController::TestCase
-
   valid_attrs = { :login => "johnsmith" }
 
   def setup
@@ -36,6 +35,14 @@ class Api::V1::UsersControllerTest < ActionController::TestCase
     assert mod_user.login == "johnsmith"
   end
 
+  test "should update admin flag" do
+    user = users(:one)
+    put :update, { :id => user.id, :user => { :admin => true } }
+
+    assert_response :success
+    assert User.find_by_id(user.id).admin?
+  end
+
   test "should not remove the anonymous role" do
     user = User.create :login => "foo", :mail => "foo@bar.com", :auth_source => auth_sources(:one)
 
@@ -59,7 +66,6 @@ class Api::V1::UsersControllerTest < ActionController::TestCase
 
     mod_user = User.find_by_id(user.id)
     assert mod_user.matching_password?("dummy")
-
   end
 
   test "should detect password validation mismatches" do
@@ -136,24 +142,6 @@ class Api::V1::UsersControllerTest < ActionController::TestCase
     end
   end
 
-# do we support this?
-=begin
-  test "should recreate the admin account" do
-    user = users(:one)
-    user.update_attribute :admin, true
-
-    User.find_by_login("admin").delete # Of course we only use destroy in the codebase
-    assert User.find_by_login("admin").nil?
-
-    as_user :one do
-      get :index, {}
-      assert_response :success
-    end
-
-    assert !User.find_by_login("admin").nil?
-  end
-=end
-
   test "#index should not show hidden users" do
     get :index, { :search => "login == #{users(:anonymous).login}" }
     results = ActiveSupport::JSON.decode(@response.body)
@@ -164,5 +152,4 @@ class Api::V1::UsersControllerTest < ActionController::TestCase
     get :show, { :id => users(:anonymous).id }
     assert_response :not_found
   end
-
 end

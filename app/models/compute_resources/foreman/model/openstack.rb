@@ -43,7 +43,7 @@ module Foreman::Model
     end
 
     def available_images
-      client.images
+      client.images.select { |image| image.status.downcase == 'active' }
     end
 
     def address_pools
@@ -55,7 +55,27 @@ module Foreman::Model
       network_client.networks.all.select { |net| !net.router_external }
     end
 
+    def image_size(image_id)
+      client.get_image_details(image_id).body['image']['minDisk']
+    end
+
+    def boot_from_volume(args = {})
+      vm_name = args[:name]
+      args[:size_gb] = image_size(args[:image_ref]) if args[:size_gb].blank?
+      boot_vol = volume_client.volumes.create( { :display_name => "#{vm_name}-vol0", :volumeType => "Volume", :size => args[:size_gb], :imageRef => args[:image_ref] } )
+      @boot_vol_id = boot_vol.id.tr('"', '')
+      boot_vol.wait_for { status == 'available'  }
+      args[:block_device_mapping_v2] = [ {
+        :source_type => "volume",
+        :destination_type => "volume",
+        :delete_on_termination => "1",
+        :uuid => @boot_vol_id,
+        :boot_index => "0"
+      } ]
+    end
+
     def create_vm(args = {})
+      boot_from_volume(args) if args[:boot_from_volume]
       network = args.delete(:network)
       # fix internal network format for fog.
       args[:nics].delete_if(&:blank?)
@@ -70,6 +90,7 @@ module Foreman::Model
       message = JSON.parse(e.response.body)['badRequest']['message'] rescue (e.to_s)
       logger.warn "failed to create vm: #{message}"
       destroy_vm vm.id if vm
+      volume_client.volumes.delete(@boot_vol_id) if args[:boot_from_volume]
       raise message
     end
 
@@ -92,7 +113,7 @@ module Foreman::Model
     end
 
     def associated_host(vm)
-      Host.authorized(:view_hosts, Host).where(:ip => [vm.floating_ip_address, vm.private_ip_address]).first
+      associate_by("ip", [vm.floating_ip_address, vm.private_ip_address])
     end
 
     def flavor_name(flavor_ref)
@@ -128,11 +149,21 @@ module Foreman::Model
       @network_client = nil
     end
 
+    def volume_client
+      @volume_client ||= ::Fog::Volume.new(:provider           => :openstack,
+                                           :openstack_api_key  => password,
+                                           :openstack_username => user,
+                                           :openstack_auth_url => url,
+                                           :openstack_tenant   => tenant)
+    end
+
     def setup_key_pair
       key = client.key_pairs.create :name => "foreman-#{id}#{Foreman.uuid}"
       KeyPair.create! :name => key.name, :compute_resource_id => self.id, :secret => key.private_key
     rescue => e
       logger.warn "failed to generate key pair"
+      logger.error e.message
+      logger.error e.backtrace.join("\n")
       destroy_key_pair
       raise
     end
@@ -176,6 +207,5 @@ module Foreman::Model
       logger.warn "failed to allocate ip address for network #{network}: #{e}"
       raise e
     end
-
   end
 end

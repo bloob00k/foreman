@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V1::PuppetclassesControllerTest < ActionController::TestCase
-
   valid_attrs = { :name => 'test_puppetclass' }
 
   test "should get index" do
@@ -34,7 +33,7 @@ class Api::V1::PuppetclassesControllerTest < ActionController::TestCase
 
   test "should get puppetclasses for given host only" do
     host1 = FactoryGirl.create(:host, :with_puppetclass)
-    host2 = FactoryGirl.create(:host, :with_puppetclass)
+    FactoryGirl.create(:host, :with_puppetclass)
     get :index, {:host_id => host1.to_param }
     assert_response :success
     puppetclasses = ActiveSupport::JSON.decode(@response.body)
@@ -47,5 +46,4 @@ class Api::V1::PuppetclassesControllerTest < ActionController::TestCase
     fact_values = ActiveSupport::JSON.decode(@response.body)
     assert fact_values.empty?
   end
-
 end

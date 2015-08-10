@@ -5,8 +5,7 @@ class TFTPOrchestrationTest < ActiveSupport::TestCase
 
   def test_host_should_have_tftp
     if unattended?
-      h = FactoryGirl.create(:host, :with_operatingsystem, :subnet => subnets(:one))
-      as_admin { h.managed = true } # make a trait for this
+      h = FactoryGirl.build(:host, :managed, :with_tftp_orchestration)
       assert h.tftp?
       assert_not_nil h.tftp
     end
@@ -20,14 +19,21 @@ class TFTPOrchestrationTest < ActiveSupport::TestCase
     end
   end
 
-  def test_generate_pxe_template_for_build
+  test 'unmanaged should not call methods after managed?' do
     if unattended?
       h = FactoryGirl.create(:host)
-      as_admin do
-        h.setBuild
-        h.update_attribute :operatingsystem, operatingsystems(:redhat)
-        h.update_attribute :architecture,    architectures(:x86_64)
-      end
+      Nic::Managed.any_instance.expects(:provision?).never
+      assert h.valid?
+      assert_equal false, h.tftp?
+    end
+  end
+
+  def test_generate_pxe_template_for_build
+    if unattended?
+      h = FactoryGirl.create(:host, :build => true,
+                             :operatingsystem => operatingsystems(:redhat),
+                             :architecture => architectures(:x86_64)
+                            )
       Setting[:unattended_url] = "http://ahost.com:3000"
 
       template = h.send(:generate_pxe_template).split("~")

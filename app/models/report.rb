@@ -33,9 +33,8 @@ class Report < ActiveRecord::Base
 
   # returns reports for hosts in the User's filter set
   scope :my_reports, lambda {
-    unless User.current.admin? and Organization.current.nil? and Location.current.nil?
-      host_ids = Host.authorized(:view_hosts, Host).select("hosts.id").all
-      where(:reports => {:host_id => host_ids})
+    if !User.current.admin? || Organization.expand(Organization.current).present? || Location.expand(Location.current).present?
+      joins_authorized(Host, :view_hosts, :where => Host.taxonomy_conditions)
     end
   }
 
@@ -71,7 +70,7 @@ class Report < ActiveRecord::Base
   end
 
   def to_label
-    "#{host.name} / #{reported_at.to_s}"
+    "#{host.name} / #{reported_at}"
   end
 
   def config_retrieval
@@ -121,8 +120,8 @@ class Report < ActiveRecord::Base
     cond += " and reports.status = #{status}" unless status.nil?
 
     Log.joins(:report).where(:report_id => Report.where(cond)).delete_all
-    Message.where("id not IN (#{Log.select(:message_id).to_sql})").delete_all
-    Source.where("id not IN (#{Log.select(:source_id).to_sql})").delete_all
+    Message.where("id not IN (#{Log.select('DISTINCT message_id').to_sql})").delete_all
+    Source.where("id not IN (#{Log.select('DISTINCT source_id').to_sql})").delete_all
     count = Report.where(cond).delete_all
     logger.info Time.now.to_s + ": Expired #{count} Reports"
     count

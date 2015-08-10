@@ -10,13 +10,11 @@ class HostgroupTest < ActiveSupport::TestCase
     assert !host_group.save
   end
 
-  test "name can't contain trailing white spaces" do
+  test "name strips leading and trailing white spaces" do
     host_group = Hostgroup.new :name => " all    hosts in the     world    "
-    assert !host_group.name.squeeze(" ").empty?
-    assert !host_group.save
-
-    host_group.name.squeeze!(" ")
     assert host_group.save
+    refute host_group.name.ends_with?(' ')
+    refute host_group.name.starts_with?(' ')
   end
 
   test "name must be unique" do
@@ -57,7 +55,7 @@ class HostgroupTest < ActiveSupport::TestCase
 
     third = Hostgroup.new(:name => "ThirdA", :parent_id => second.id,
                           :group_parameters_attributes => { pid += 1 => {"name"=>"topB", "value"=>"3", :nested => ""},
-                                                            pid += 1 => {"name"=>"topA", "value"=>"3", :nested => ""}})
+                                                            pid +  1 => {"name"=>"topA", "value"=>"3", :nested => ""}})
     assert third.save
 
     assert third.parameters.include? "topA"
@@ -84,7 +82,7 @@ class HostgroupTest < ActiveSupport::TestCase
 
   test "blocks deletion of hosts with children" do
     top = Hostgroup.create(:name => "topA")
-    second = Hostgroup.create(:name => "secondB", :parent_id => top.id)
+    Hostgroup.create(:name => "secondB", :parent_id => top.id)
 
     assert top.has_children?
     assert_raise Ancestry::AncestryException do
@@ -117,8 +115,8 @@ class HostgroupTest < ActiveSupport::TestCase
 
     #attempt to destroy parent hostgroup
     begin
-    assert_not parent_hostgroup.destroy
-    rescue Ancestry::AncestryException
+      assert_not parent_hostgroup.destroy
+      rescue Ancestry::AncestryException
     end
     # check if hostgroup(:db) label remains the same
     hostgroup.reload
@@ -306,6 +304,31 @@ class HostgroupTest < ActiveSupport::TestCase
     assert hostgroup.valid?
   end
 
+  test "root_pass inherited from parent if blank" do
+    parent = FactoryGirl.create(:hostgroup, :root_pass => '12345678')
+    hostgroup = FactoryGirl.build(:hostgroup, :parent => parent, :root_pass => '')
+    assert_equal parent.read_attribute(:root_pass), hostgroup.root_pass
+    hostgroup.save!
+    assert_blank hostgroup.read_attribute(:root_pass), 'root_pass should not be copied and stored on child'
+  end
+
+  test "root_pass inherited from settings if blank" do
+    Setting[:root_pass] = '12345678'
+    hostgroup = FactoryGirl.build(:hostgroup, :root_pass => '')
+    assert_equal '12345678', hostgroup.root_pass
+    hostgroup.save!
+    assert_blank hostgroup.read_attribute(:root_pass), 'root_pass should not be copied and stored on child'
+  end
+
+  test "root_pass inherited from settings if group and parent are blank" do
+    Setting[:root_pass] = '12345678'
+    parent = FactoryGirl.create(:hostgroup, :root_pass => '')
+    hostgroup = FactoryGirl.build(:hostgroup, :parent => parent, :root_pass => '')
+    assert_equal '12345678', hostgroup.root_pass
+    hostgroup.save!
+    assert_blank hostgroup.read_attribute(:root_pass), 'root_pass should not be copied and stored on child'
+  end
+
   test "hostgroup name can't be too big to create lookup value matcher over 255 characters" do
     parent = FactoryGirl.create(:hostgroup)
     min_lookupvalue_length = "hostgroup=".length + parent.title.length + 1
@@ -334,4 +357,38 @@ class HostgroupTest < ActiveSupport::TestCase
     assert_equal "#{hostgroup.id}-a-b",  hostgroup.to_param
   end
 
+  context "#clone" do
+    let(:group) {FactoryGirl.create(:hostgroup, :name => 'a')}
+
+    test "clone should clone config groups as well" do
+      config_group = ConfigGroup.create!(:name => 'Blah')
+      group.config_groups << config_group
+
+      cloned = group.clone("new_name")
+      assert cloned.config_groups.include?(config_group)
+    end
+
+    test "clone should clone puppet classes" do
+      group.puppetclasses << FactoryGirl.create(:puppetclass)
+      cloned = group.clone("new_name")
+      assert cloned.puppetclasses.size == 1
+      assert_equal cloned.puppetclasses, group.puppetclasses
+    end
+
+    test "clone should clone parameters" do
+      group.group_parameters.create!(:name => "foo", :value => "bar")
+      cloned = group.clone("new_name")
+      cloned.save!(:validate => false)
+      assert_equal cloned.group_parameters.map{|p| [p.name, p.value]}, group.group_parameters.map{|p| [p.name, p.value]}
+    end
+
+    test "clone should clone lookup values" do
+      lv = lookup_values(:four)
+      lv.match = group.send(:lookup_value_match)
+      lv.save!
+      cloned = group.clone("new_name")
+      cloned.save
+      assert_equal cloned.lookup_values.map(&:value), group.lookup_values.map(&:value)
+    end
+  end
 end

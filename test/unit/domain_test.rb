@@ -2,14 +2,13 @@ require 'test_helper'
 
 class DomainTest < ActiveSupport::TestCase
   def setup
+    disable_orchestration
     User.current = users(:admin)
     @new_domain = Domain.new
     @domain = domains(:mydomain)
     Domain.all.each do |d| #because we load from fixtures, counters aren't updated
-      Domain.reset_counters(d.id,:hosts)
       Domain.reset_counters(d.id,:hostgroups)
     end
-
   end
 
   test "should not save without a name" do
@@ -52,7 +51,6 @@ class DomainTest < ActiveSupport::TestCase
   end
 
   test "should not destroy if it contains subnets" do
-
     @domain.subnets.clear
     assert @domain.subnets.empty?
     @domain.subnets << Subnet.first
@@ -85,7 +83,11 @@ class DomainTest < ActiveSupport::TestCase
   test "should update hosts_count on domain_id change" do
     domain = domains(:yourdomain)
     assert_difference "domain.hosts_count" do
-      FactoryGirl.create(:host).update_attribute(:domain_id, domain.id)
+      host = FactoryGirl.create(:host, :managed, :ip => '127.0.0.1')
+      primary = host.primary_interface
+      primary.domain = domain
+      primary.host.overwrite = true
+      assert primary.save
       domain.reload
     end
   end
@@ -106,7 +108,7 @@ class DomainTest < ActiveSupport::TestCase
 #  end
 
   def create_a_host
-    FactoryGirl.create(:host)
+    FactoryGirl.create(:host, :domain => FactoryGirl.build(:domain))
   end
 
   test "should query local nameservers when enabled" do
@@ -127,6 +129,5 @@ class DomainTest < ActiveSupport::TestCase
   test "should get used and selected location ids for host" do
     assert_equal [taxonomies(:location1).id], domains(:mydomain).used_or_selected_location_ids
   end
-
 end
 

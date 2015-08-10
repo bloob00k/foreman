@@ -6,20 +6,29 @@ class Hostgroup < ActiveRecord::Base
   include HostCommon
   include NestedAncestryCommon
   include ScopedSearchExtensions
+  include PuppetclassTotalHosts::Indirect
 
   validates_lengths_from_database :except => [:name]
   before_destroy EnsureNotUsedBy.new(:hosts)
-  has_many :hostgroup_classes, :dependent => :destroy
-  has_many :puppetclasses, :through => :hostgroup_classes
-  validates :name, :format => { :with => /\A(\S+\s?)+\Z/, :message => N_("can't contain trailing white spaces.")}
+  has_many :hostgroup_classes
+  has_many :puppetclasses, :through => :hostgroup_classes, :dependent => :destroy
+  validates :name, :presence => true
   validates :root_pass, :allow_blank => true, :length => {:minimum => 8, :message => _('should be 8 characters or more')}
   has_many :group_parameters, :dependent => :destroy, :foreign_key => :reference_id, :inverse_of => :hostgroup
   accepts_nested_attributes_for :group_parameters, :allow_destroy => true
   include ParameterValidators
-  has_many_hosts
+  has_many_hosts :after_add => :update_puppetclasses_total_hosts,
+                 :after_remove => :update_puppetclasses_total_hosts
   has_many :template_combinations, :dependent => :destroy
   has_many :config_templates, :through => :template_combinations
+
+  include CounterCacheFix
+  counter_cache = "#{model_name.split(":").first.pluralize.downcase}_count".to_sym  # e.g. :hosts_count
+  belongs_to :domain, :counter_cache => counter_cache
+  belongs_to :subnet
+
   before_save :remove_duplicated_nested_class
+  after_save :update_ancestry_puppetclasses, :if => :ancestry_changed?
 
   alias_attribute :arch, :architecture
   alias_attribute :os, :operatingsystem
@@ -41,7 +50,7 @@ class Hostgroup < ActiveRecord::Base
   scoped_search :in => :hosts, :on => :name, :complete_value => :true, :rename => "host"
   scoped_search :in => :puppetclasses, :on => :name, :complete_value => true, :rename => :class, :operators => ['= ', '~ ']
   scoped_search :in => :environment, :on => :name, :complete_value => :true, :rename => :environment
-  scoped_search :on => :id, :complete_value => :true
+  scoped_search :on => :id, :complete_enabled => false, :only_explicit => true
   # for legacy purposes, keep search on :label
   scoped_search :on => :title, :complete_value => true, :rename => :label
   scoped_search :in => :config_groups, :on => :name, :complete_value => true, :rename => :config_group, :only_explicit => true, :operators => ['= ', '~ '], :ext_method => :search_by_config_group
@@ -56,10 +65,15 @@ class Hostgroup < ActiveRecord::Base
   end
 
   if SETTINGS[:unattended]
-    scoped_search :in => :architecture, :on => :name, :complete_value => :true, :rename => :architecture
-    scoped_search :in => :operatingsystem, :on => :name, :complete_value => true, :rename => :os
-    scoped_search :in => :medium,            :on => :name, :complete_value => :true, :rename => "medium"
-    scoped_search :in => :config_templates, :on => :name, :complete_value => :true, :rename => "template"
+    scoped_search :in => :architecture,     :on => :name,        :complete_value => true,  :rename => :architecture
+    scoped_search :in => :operatingsystem,  :on => :name,        :complete_value => true,  :rename => :os
+    scoped_search :in => :operatingsystem,  :on => :description, :complete_value => true,  :rename => :os_description
+    scoped_search :in => :operatingsystem,  :on => :title,       :complete_value => true,  :rename => :os_title
+    scoped_search :in => :operatingsystem,  :on => :major,       :complete_value => true,  :rename => :os_major
+    scoped_search :in => :operatingsystem,  :on => :minor,       :complete_value => true,  :rename => :os_minor
+    scoped_search :in => :operatingsystem,  :on => :id,          :complete_enabled => false, :rename => :os_id, :only_explicit => true
+    scoped_search :in => :medium,           :on => :name,        :complete_value => true,  :rename => "medium"
+    scoped_search :in => :config_templates, :on => :name,        :complete_value => true,  :rename => "template"
   end
 
   # returns reports for hosts in the User's filter set
@@ -78,7 +92,7 @@ class Hostgroup < ActiveRecord::Base
     allow :name, :diskLayout, :puppetmaster, :operatingsystem, :architecture,
       :environment, :ptable, :url_for_boot, :params, :puppetproxy, :param_true?,
       :param_false?, :puppet_ca_server, :indent, :os, :arch, :domain, :subnet,
-      :realm
+      :realm, :root_pass
   end
 
   #TODO: add a method that returns the valid os for a hostgroup
@@ -126,7 +140,7 @@ class Hostgroup < ActiveRecord::Base
     ids << id unless new_record? or self.frozen?
     # need to pull out the hostgroups to ensure they are sorted first,
     # otherwise we might be overwriting the hash in the wrong order.
-    groups = ids.size == 1 ? [self] : Hostgroup.includes(:group_parameters).sort_by_ancestry(Hostgroup.find(ids))
+    groups = ids.size == 1 ? [self] : Hostgroup.sort_by_ancestry(Hostgroup.includes(:group_parameters).find(ids))
     groups.each do |hg|
       hg.group_parameters.each {|p| hash[p.name] = include_source ? {:value => p.value, :source => N_('hostgroup').to_sym, :safe_value => p.safe_value, :source_name => hg.title} : p.value }
     end
@@ -135,7 +149,7 @@ class Hostgroup < ActiveRecord::Base
   end
 
   def global_parameters
-    Hostgroup.includes(:group_parameters).sort_by_ancestry(Hostgroup.find(ancestor_ids + id)).map(&:group_parameters).uniq
+    Hostgroup.sort_by_ancestry(Hostgroup.includes(:group_parameters).find(ancestor_ids + id)).map(&:group_parameters).uniq
   end
 
   def inherited_params(include_source = false)
@@ -168,7 +182,10 @@ class Hostgroup < ActiveRecord::Base
 
   # no need to store anything in the db if the password is our default
   def root_pass
-    read_attribute(:root_pass) || nested_root_pw || Setting[:root_pass]
+    return read_attribute(:root_pass) if read_attribute(:root_pass).present?
+    npw = nested_root_pw
+    return npw if npw.present?
+    Setting[:root_pass]
   end
 
   # Clone the hostgroup
@@ -178,9 +195,21 @@ class Hostgroup < ActiveRecord::Base
     new.puppetclasses = puppetclasses
     new.locations     = locations
     new.organizations = organizations
+    new.config_groups = config_groups
+
     # Clone any parameters as well
     self.group_parameters.each{|param| new.group_parameters << param.clone}
+    self.lookup_values.each do |lookup_value|
+      new_lookup_value = lookup_value.dup
+      new_lookup_value.match = "hostgroup=#{new.title}"
+      new.lookup_values << new_lookup_value
+    end
     new
+  end
+
+  def update_ancestry_puppetclasses
+    unscoped_find(ancestry_was.to_s.split('/').last.to_i).update_puppetclasses_total_hosts if ancestry_was.present?
+    unscoped_find(ancestry.to_s.split('/').last.to_i).update_puppetclasses_total_hosts if ancestry.present?
   end
 
   private
@@ -205,5 +234,4 @@ class Hostgroup < ActiveRecord::Base
     return [] if new_record? && parent_id.blank?
     Host::Base.where(:hostgroup_id => self.path_ids).pluck(type).compact.uniq
   end
-
 end

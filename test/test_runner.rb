@@ -1,5 +1,4 @@
 class ForemanMiniTest < MiniTest::Unit
-
   def _run_suites(suites, type)
     suites.each do |suite|
       next unless type == :test
@@ -15,7 +14,7 @@ class ForemanMiniTest < MiniTest::Unit
               Foreman::Plugin.tests_to_skip[self.to_s].detect do |string|
                 # Use a substring match, as test => "test_0010_foo" and string => "foo"
                 if test[string]
-                  puts "skipping #{self.to_s}##{test}"
+                  puts "skipping #{self}##{test}"
                   string
                 end
               end
@@ -27,7 +26,6 @@ class ForemanMiniTest < MiniTest::Unit
 
     super(suites, type)
   end
-
 end
 
 MiniTest::Unit.runner = ForemanMiniTest.new

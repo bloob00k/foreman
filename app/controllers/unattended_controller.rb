@@ -103,7 +103,7 @@ class UnattendedController < ApplicationController
   end
 
   def find_host_by_spoof
-    host   = Host.find_by_ip(params.delete('spoof')) if params['spoof'].present?
+    host = Nic::Base.primary.find_by_ip(params.delete('spoof')).try(:host) if params['spoof'].present?
     host ||= Host.find(params.delete('hostname')) if params['hostname'].present?
     @spoof = host.present?
     host
@@ -114,7 +114,7 @@ class UnattendedController < ApplicationController
     return nil if token.blank?
     # Quirk: ZTP requires the .slax suffix
     if ( result = token.match(/^([a-z0-9-]+)(.slax)$/i) )
-      token, suffix = result.captures
+      token, _suffix = result.captures
     end
     Host.for_token(token).first
   end
@@ -140,7 +140,9 @@ class UnattendedController < ApplicationController
       end
     end
     # we try to match first based on the MAC, falling back to the IP
-    Host.where(mac_list.empty? ? { :ip => ip } : ["lower(mac) IN (?)", mac_list]).first
+    # host is readonly because of association so we reload it if we find it
+    host = Host.joins(:provision_interface).where(mac_list.empty? ? {:nics => {:ip => ip}} : ["lower(nics.mac) IN (?)", mac_list]).first
+    host ? Host.find(host.id) : nil
   end
 
   def allowed_to_install?
@@ -158,7 +160,7 @@ class UnattendedController < ApplicationController
     # This should terminate the before_filter and the action. We return a HTTP
     # error so the installer knows something is wrong. This is tested with
     # Anaconda, but maybe Suninstall will choke on it.
-    render(:text => _("Failed to clean any old certificates or add the autosign entry. Terminating the build!"), :status => 500) unless @host.handle_ca
+    render(:text => _("Failed to clean any old certificates or add the autosign entry. Terminating the build!"), :status => :internal_server_error) unless @host.handle_ca
     #TODO: Email the user who initiated this build operation.
   end
 
@@ -170,9 +172,8 @@ class UnattendedController < ApplicationController
     # This should terminate the before_filter and the action. We return a HTTP
     # error so the installer knows something is wrong. This is tested with
     # Anaconda, but maybe Suninstall will choke on it.
-    render(:text => _("Failed to get a new realm OTP. Terminating the build!"), :status => 500) unless @host.handle_realm
+    render(:text => _("Failed to get a new realm OTP. Terminating the build!"), :status => :internal_server_error) unless @host.handle_realm
   end
-
 
   def set_content_type
     response.headers['Content-Type'] = 'text/plain'
@@ -186,6 +187,11 @@ class UnattendedController < ApplicationController
 
     # force static network configuration if static http parameter is defined, in the future this needs to go into the GUI
     @static = !params[:static].empty?
+
+    # this is sent by the proxy when the templates feature is enabled
+    # and is needed to direct the host to the correct url. without it, we increase
+    # latency by requesting the correct url directly from the proxy.
+    @template_url = params['url']
   end
 
   def alterator_attributes
@@ -229,6 +235,10 @@ class UnattendedController < ApplicationController
   end
 
   def yast_attributes
+  end
+
+  def coreos_attributes
+    @mediapath = @host.operatingsystem.mediumpath @host
   end
 
   def aif_attributes
@@ -290,8 +300,7 @@ class UnattendedController < ApplicationController
       render :inline => "<%= unattended_render(@unsafe_template, @template_name).html_safe %>" and return
     rescue => exc
       msg = _("There was an error rendering the %s template: ") % (@template_name)
-      render :text => msg + exc.message, :status => 500 and return
+      render :text => msg + exc.message, :status => :internal_server_error and return
     end
   end
-
 end

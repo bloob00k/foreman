@@ -38,6 +38,7 @@ Foreman::Application.routes.draw do
         get 'runtime'
         get 'resources'
         get 'templates'
+        get 'nics'
         put 'ipmi_boot'
         put 'disassociate'
       end
@@ -79,6 +80,7 @@ Foreman::Application.routes.draw do
         post 'domain_selected'
         post 'use_image_selected'
         post 'compute_resource_selected'
+        post 'interfaces'
         post 'medium_selected'
         get  'select_multiple_organization'
         post 'update_multiple_organization'
@@ -93,7 +95,6 @@ Foreman::Application.routes.draw do
         resources :puppetclasses, :only => :index
       end
     end
-
 
     resources :bookmarks, :except => [:show]
     resources :lookup_keys, :except => [:show, :new, :create] do
@@ -182,7 +183,6 @@ Foreman::Application.routes.draw do
       resources :lookup_keys, :except => [:show, :new, :create]
     end
   end
-
 
   resources :smart_proxies, :except => [:show] do
     member do
@@ -415,5 +415,4 @@ Foreman::Application.routes.draw do
   end
 
   resources :interfaces, :only => :new
-
 end

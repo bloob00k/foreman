@@ -1,6 +1,7 @@
 class ConfigTemplatesController < ApplicationController
   include Foreman::Controller::AutoCompleteSearch
   include Foreman::Renderer
+  include Foreman::Controller::ConfigTemplates
 
   before_filter :handle_template_upload, :only => [:create, :update]
   before_filter :find_resource, :only => [:edit, :update, :destroy, :clone, :lock, :unlock]
@@ -16,7 +17,7 @@ class ConfigTemplatesController < ApplicationController
 
   def clone
     @config_template = @config_template.clone
-    load_vars_for_form
+    load_vars_from_config_template
     flash[:warning] = _("The marked fields will need reviewing")
     @config_template.valid?
     render :action => :new
@@ -40,7 +41,7 @@ class ConfigTemplatesController < ApplicationController
   end
 
   def edit
-    load_vars_for_form
+    load_vars_from_config_template
   end
 
   def update
@@ -50,15 +51,6 @@ class ConfigTemplatesController < ApplicationController
       load_history
       process_error
     end
-  end
-
-  def load_vars_for_form
-    return unless @config_template
-
-    @locations = @config_template.locations
-    @organizations = @config_template.organizations
-    @template_kind_id = @config_template.template_kind_id
-    @operatingsystems = @config_template.operatingsystems
   end
 
   def revision
@@ -91,26 +83,14 @@ class ConfigTemplatesController < ApplicationController
     end
   end
 
-  # convert the file upload into a simple string to save in our db.
-  def handle_template_upload
-    return unless params[:config_template] and (t=params[:config_template][:template])
-    params[:config_template][:template] = t.read if t.respond_to?(:read)
-  end
-
   def load_history
     return unless @config_template
     @history = Audit.descending.where(:auditable_id => @config_template.id, :auditable_type => 'ConfigTemplate')
   end
 
-  def default_template_url(template, hostgroup)
-    url_for :host => Setting[:unattended_url], :action => :template, :controller => '/unattended',
-      :id => template.name, :hostgroup => hostgroup.name
-  end
-
   def controller_permission
     'templates'
   end
-
 
   def action_permission
     case params[:action]

@@ -14,7 +14,7 @@ module FogExtensions
       end
 
       def dns
-         dns_name || private_dns_name
+        dns_name || private_dns_name
       end
 
       def vm_ip_address
@@ -36,7 +36,6 @@ module FogExtensions
       def ip_addresses
         [public_ip_address, private_ip_address].flatten.select(&:present?)
       end
-
     end
   end
 end

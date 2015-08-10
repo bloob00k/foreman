@@ -1,11 +1,8 @@
 # config/routes/api/v2.rb
 Foreman::Application.routes.draw do
-
   namespace :api, :defaults => {:format => 'json'} do
-
     # new v2 routes that point to v2
     scope "(:apiv)", :module => :v2, :defaults => {:apiv => 'v2'}, :apiv => /v1|v2/, :constraints => ApiConstraints.new(:version => 2) do
-
       resources :architectures, :except => [:new, :edit] do
         constraints(:id => /[^\/]+/) do
           resources :hosts, :except => [:new, :edit]
@@ -29,6 +26,7 @@ Foreman::Application.routes.draw do
       resources :config_templates, :except => [:new, :edit] do
         (resources :locations, :only => [:index, :show]) if SETTINGS[:locations_enabled]
         (resources :organizations, :only => [:index, :show]) if SETTINGS[:organizations_enabled]
+        post :clone, :on => :member
         collection do
           get 'build_pxe_default'
           get 'revision'
@@ -297,7 +295,6 @@ Foreman::Application.routes.draw do
 
       if SETTINGS[:locations_enabled]
         resources :locations, :except => [:new, :edit] do
-
           # scoped by location
           resources :domains, :only => [:index, :show]
           resources :realms, :only => [:index, :show]
@@ -332,13 +329,11 @@ Foreman::Application.routes.draw do
             resources :filters, :only => [:index, :show]
             resources :hosts, :except => [:new, :edit]
           end
-
         end
       end
 
       if SETTINGS[:organizations_enabled]
         resources :organizations, :except => [:new, :edit] do
-
           # scoped by organization
           resources :domains, :only => [:index, :show]
           resources :realms, :only => [:index, :show]
@@ -373,7 +368,6 @@ Foreman::Application.routes.draw do
             resources :filters, :only => [:index, :show]
             resources :hosts, :except => [:new, :edit]
           end
-
         end
       end
       get 'orchestration/(:id)/tasks', :to => 'tasks#index'

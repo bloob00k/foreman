@@ -8,12 +8,20 @@ FactoryGirl.define do
       name 'TFTP'
     end
 
+    trait :tftp do
+      name 'tftp'
+    end
+
     trait :dhcp do
       name 'dhcp'
     end
 
     trait :dns do
       name 'dns'
+    end
+
+    trait :realm do
+      name 'realm'
     end
 
     trait :puppetca do

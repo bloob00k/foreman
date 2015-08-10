@@ -17,9 +17,7 @@ module HostCommon
     belongs_to :ptable
     belongs_to :puppet_proxy,    :class_name => "SmartProxy"
     belongs_to :puppet_ca_proxy, :class_name => "SmartProxy"
-    belongs_to :domain,          :counter_cache => counter_cache
     belongs_to :realm,           :counter_cache => counter_cache
-    belongs_to :subnet
     belongs_to :compute_profile
 
     before_save :check_puppet_ca_proxy_is_required?, :crypt_root_pass
@@ -32,7 +30,7 @@ module HostCommon
 
     alias_method :all_puppetclasses, :classes
 
-    has_many :lookup_values, :finder_sql => Proc.new { LookupValue.where('lookup_values.match' => lookup_value_match).to_sql }, :dependent => :destroy
+    has_many :lookup_values, :finder_sql => Proc.new { LookupValue.where('lookup_values.match' => lookup_value_match).to_sql }, :dependent => :destroy, :validate => false
     # See "def lookup_values_attributes=" under, for the implementation of accepts_nested_attributes_for :lookup_values
     accepts_nested_attributes_for :lookup_values
     # Replacement of accepts_nested_attributes_for :lookup_values,
@@ -107,11 +105,18 @@ module HostCommon
   end
 
   def crypt_root_pass
-    unless root_pass.empty?
-      unencrypted_pass = root_pass
-      self.root_pass = unencrypted_pass.starts_with?('$') ? unencrypted_pass :
+    # hosts will always copy and crypt the password from parents when saved, but hostgroups should
+    # only crypt if the attribute is stored, else will stay blank and inherit
+    unencrypted_pass = if is_a?(Hostgroup)
+                         read_attribute(:root_pass)
+                       else
+                         root_pass
+                       end
+
+    if unencrypted_pass.present?
+      self.root_pass = !!(unencrypted_pass.match('^\$\d+\$.+\$.+')) ? unencrypted_pass :
           (operatingsystem.nil? ? PasswordCrypt.passw_crypt(unencrypted_pass) : PasswordCrypt.passw_crypt(unencrypted_pass, operatingsystem.password_hash))
-      self.grub_pass = unencrypted_pass.starts_with?('$') ? unencrypted_pass : PasswordCrypt.grub2_passw_crypt(unencrypted_pass)
+      self.grub_pass = !!(unencrypted_pass.match('^\$\d+\$.+\$.+')) ? unencrypted_pass : PasswordCrypt.grub2_passw_crypt(unencrypted_pass)
     end
   end
 
@@ -124,7 +129,7 @@ module HostCommon
   end
 
   def cg_class_ids
-    cg_ids = if kind_of?(Hostgroup)
+    cg_ids = if is_a?(Hostgroup)
                path.each.map(&:config_group_ids).flatten.uniq
              else
                config_group_ids + (hostgroup ? hostgroup.path.each.map(&:config_group_ids).flatten.uniq : [] )
@@ -133,16 +138,16 @@ module HostCommon
   end
 
   def hg_class_ids
-    hg_ids = if kind_of?(Hostgroup)
-                path_ids
+    hg_ids = if is_a?(Hostgroup)
+               path_ids
              elsif hostgroup
-                hostgroup.path_ids
+               hostgroup.path_ids
              end
     HostgroupClass.where(:hostgroup_id => hg_ids).pluck(:puppetclass_id)
   end
 
   def host_class_ids
-    h_ids = kind_of?(Host::Base) ? host_classes.pluck(:puppetclass_id) : []
+    is_a?(Host::Base) ? host_classes.pluck(:puppetclass_id) : []
   end
 
   def all_puppetclass_ids
@@ -193,16 +198,17 @@ module HostCommon
   end
 
   def cnt_hostgroups(config_group)
-    Hostgroup.search_for(%Q{config_group="#{config_group.name}"}).count
+    Hostgroup.search_for(%{config_group="#{config_group.name}"}).count
   end
 
   def cnt_hosts(config_group)
-    Host::Managed.search_for(%Q{config_group="#{config_group.name}"}).count
+    Host::Managed.search_for(%{config_group="#{config_group.name}"}).count
   end
 
   def update_config_group_counters(record)
     record.update_attribute(:hostgroups_count, cnt_hostgroups(record))
     record.update_attribute(:hosts_count, cnt_hosts(record))
-  end
 
+    record.update_puppetclasses_total_hosts
+  end
 end

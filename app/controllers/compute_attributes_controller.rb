@@ -1,5 +1,4 @@
 class ComputeAttributesController < ApplicationController
-
   def new
     @set = ComputeAttribute.new(:compute_profile_id => params[:compute_profile_id].to_i,
                                               :compute_resource_id => params[:compute_resource_id].to_i)
@@ -10,7 +9,7 @@ class ComputeAttributesController < ApplicationController
     if @set.save
       process_success :success_redirect => request.referer || compute_profile_path(@set.compute_profile)
     else
-      process_error
+      process_error :object => @set
     end
   end
 
@@ -23,8 +22,7 @@ class ComputeAttributesController < ApplicationController
     if @set.update_attributes!(params[:compute_attribute])
       process_success :success_redirect => request.referer || compute_profile_path(@set.compute_profile)
     else
-      process_error
+      process_error :object => @set
     end
   end
-
 end

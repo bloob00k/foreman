@@ -23,9 +23,8 @@ class FactValue < ActiveRecord::Base
     joins(:fact_name).where("fact_names.name = ?",:_timestamp)
   }
   scope :my_facts, lambda {
-    unless User.current.admin? and Organization.current.nil? and Location.current.nil?
-      host_ids = Host.authorized(:view_hosts, Host).select('hosts.id').all
-      where(:fact_values => {:host_id => host_ids})
+    if !User.current.admin? || Organization.expand(Organization.current).present? || Location.expand(Location.current).present?
+      joins_authorized(Host, :view_hosts, :where => Host.taxonomy_conditions)
     end
   }
 
@@ -39,8 +38,6 @@ class FactValue < ActiveRecord::Base
   validates :fact_name_id, :uniqueness => { :scope => :host_id }
 
   def self.search_by_host(key, operator, value)
-    search = []
-
     search_term = value =~ /\A\d+\Z/ ? 'id' : 'name'
     conditions = sanitize_sql_for_conditions(["hosts.#{search_term} #{operator} ?", value_to_sql(operator, value)])
     search     = FactValue.joins(:host).where(conditions).select('fact_values.id').map(&:id).uniq
@@ -105,5 +102,4 @@ class FactValue < ActiveRecord::Base
     end
     [ values.sum, values.size ]
   end
-
 end

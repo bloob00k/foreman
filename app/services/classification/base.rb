@@ -1,6 +1,5 @@
 module Classification
   class Base
-
     delegate :hostgroup, :environment_id, :puppetclass_ids, :classes,
              :to => :host
 
@@ -38,8 +37,20 @@ module Classification
       values = Hash.new { |h,k| h[k] = {} }
       all_lookup_values = LookupValue.where(:match => path2matches).where(:lookup_key_id => class_parameters)
       class_parameters.each do |key|
-        lookup_values_for_key = all_lookup_values.where(:lookup_key_id => key.id, :use_puppet_default => false)
-        sorted_lookup_values = lookup_values_for_key.sort_by { |lv| key.path.index(lv.match.split(LookupKey::EQ_DELM).first) }
+        lookup_values_for_key = all_lookup_values.where(:lookup_key_id => key.id, :use_puppet_default => false).includes(:lookup_key)
+        sorted_lookup_values = lookup_values_for_key.sort_by do |lv|
+          matcher_key = ''
+          matcher_value = ''
+          lv.match.split(LookupKey::KEY_DELM).each do |match_key|
+            element = match_key.split(LookupKey::EQ_DELM).first
+            matcher_key += element + ','
+            if element == 'hostgroup'
+              matcher_value = match_key.split(LookupKey::EQ_DELM).last
+            end
+          end
+          # prefer matchers in order of the path, then more specific matches (i.e. hostgroup children)
+          [key.path.index(matcher_key.chomp(',')), -1 * matcher_value.length]
+        end
         value = nil
         if key.merge_overrides
           case key.key_type
@@ -65,11 +76,16 @@ module Classification
       value = if values[key.id] and values[key.id][key.to_s]
                 {:value => values[key.id][key.to_s][:value]}
               else
-                {:value => key.default_value, :managed => key.use_puppet_default}
+                default_value_method = %w(yaml json).include?(key.key_type) ? :default_value_before_type_cast : :default_value
+                {:value => key.send(default_value_method), :managed => key.use_puppet_default}
               end
 
       return nil if value[:managed]
-      @safe_render.parse(value[:value])
+      needs_late_validation = key.contains_erb?(value[:value])
+      value = @safe_render.parse(value[:value])
+      value = type_cast(key, value)
+      validate_lookup_value(key, value) if needs_late_validation
+      value
     end
 
     def hostgroup_matches
@@ -128,12 +144,36 @@ module Classification
 
     private
 
+    def validate_lookup_value(key, value)
+      lookup_value = key.lookup_values.build(:value => value)
+      return true if lookup_value.send(:validate_list) && lookup_value.send(:validate_regexp)
+      raise "Invalid value '#{value}' of parameter #{key.id} '#{key.key}'"
+    end
+
+    def type_cast(key, value)
+      key.cast_validate_value(value)
+    rescue TypeError
+      Rails.logger.warn "Unable to type cast #{value} to #{key.key_type}"
+    end
+
+    def get_element_and_element_name(lookup_value)
+      element = ''
+      element_name = ''
+      lookup_value.match.split(LookupKey::KEY_DELM).each do |match_key|
+        lv_element, lv_element_name = match_key.split(LookupKey::EQ_DELM)
+        element += lv_element + ','
+        element_name += lv_element_name + ','
+      end
+      [element.chomp(','), element_name.chomp(',')]
+    end
+
     def update_generic_matcher(lookup_values, options)
       computed_lookup_value = nil
       lookup_values.each do |lookup_value|
-        element, element_name = lookup_value.match.split(LookupKey::EQ_DELM)
+        element, element_name = get_element_and_element_name(lookup_value)
         next if (options[:skip_fqdn] && element=="fqdn")
-        computed_lookup_value = {:value => lookup_value.value, :element => element,
+        value_method = %w(yaml json).include?(lookup_value.lookup_key.key_type) ? :value_before_type_cast : :value
+        computed_lookup_value = {:value => lookup_value.send(value_method), :element => element,
                                  :element_name => element_name}
         break
       end
@@ -146,7 +186,7 @@ module Classification
       element_names = []
 
       lookup_values.each do |lookup_value|
-        element, element_name = lookup_value.match.split(LookupKey::EQ_DELM)
+        element, element_name = get_element_and_element_name(lookup_value)
         next if (options[:skip_fqdn] && element=="fqdn")
         elements << element
         element_names << element_name
@@ -169,7 +209,7 @@ module Classification
       # to make sure seep merge overrides by priority, putting in the values with the lower priority first
       # and then merging with higher priority
       lookup_values.reverse.each do |lookup_value|
-        element, element_name = lookup_value.match.split(LookupKey::EQ_DELM)
+        element, element_name = get_element_and_element_name(lookup_value)
         next if (options[:skip_fqdn] && element=="fqdn")
         elements << element
         element_names << element_name

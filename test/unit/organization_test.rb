@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class OrganizationTest < ActiveSupport::TestCase
-
   setup do
     User.current = users :admin
   end
@@ -50,9 +49,11 @@ class OrganizationTest < ActiveSupport::TestCase
 
   test 'it should return array of used ids by hosts' do
     organization = taxonomies(:organization1)
+    subnet = FactoryGirl.create(:subnet, :organizations => [organization])
+    domain = FactoryGirl.create(:domain)
     FactoryGirl.create(:host,
                        :compute_resource => compute_resources(:one),
-                       :domain           => domains(:mydomain),
+                       :domain           => domain,
                        :environment      => environments(:production),
                        :medium           => media(:one),
                        :operatingsystem  => operatingsystems(:centos5_3),
@@ -60,7 +61,8 @@ class OrganizationTest < ActiveSupport::TestCase
                        :owner            => users(:restricted),
                        :puppet_proxy     => smart_proxies(:puppetmaster),
                        :realm            => realms(:myrealm),
-                       :subnet           => subnets(:one))
+                       :subnet           => subnet,
+                       :location         => nil)
     FactoryGirl.create(:os_default_template,
                        :config_template  => config_templates(:mystring2),
                        :operatingsystem  => operatingsystems(:centos5_3),
@@ -70,8 +72,8 @@ class OrganizationTest < ActiveSupport::TestCase
     # get results from Host object
     environment_ids = Host.where(:organization_id => organization.id).pluck(:environment_id).compact.uniq
     hostgroup_ids = Host.where(:organization_id => organization.id).pluck(:hostgroup_id).compact.uniq
-    subnet_ids = Host.where(:organization_id => organization.id).pluck(:subnet_id).compact.uniq
-    domain_ids = Host.where(:organization_id => organization.id).pluck(:domain_id).compact.uniq
+    subnet_ids = Host.where(:organization_id => organization.id).joins(:primary_interface => :subnet).pluck(:subnet_id).map(&:to_i).compact.uniq
+    domain_ids = Host.where(:organization_id => organization.id).joins(:primary_interface => :domain).pluck(:domain_id).map(&:to_i).compact.uniq
     realm_ids = Host.where(:organization_id => organization.id).pluck(:realm_id).compact.uniq
     medium_ids = Host.where(:organization_id => organization.id).pluck(:medium_id).compact.uniq
     compute_resource_ids = Host.where(:organization_id => organization.id).pluck(:compute_resource_id).compact.uniq
@@ -92,12 +94,13 @@ class OrganizationTest < ActiveSupport::TestCase
     # match to raw fixtures data
     assert_equal used_ids[:environment_ids].sort, [environments(:production).id]
     assert_equal used_ids[:hostgroup_ids].sort, []
-    assert_equal used_ids[:subnet_ids], [subnets(:one).id]
-    assert_equal used_ids[:domain_ids], [domains(:mydomain).id]
+    assert_equal used_ids[:subnet_ids], [subnet.id]
+    assert_equal used_ids[:domain_ids], [domain.id]
     assert_equal used_ids[:medium_ids], [media(:one).id]
     assert_equal used_ids[:compute_resource_ids].sort, [compute_resources(:one).id]
     assert_equal used_ids[:user_ids], [users(:restricted).id]
-    assert_equal used_ids[:smart_proxy_ids].sort, [smart_proxies(:one).id, smart_proxies(:two).id, smart_proxies(:three).id, smart_proxies(:puppetmaster).id, smart_proxies(:realm).id].sort
+    assert_includes used_ids[:smart_proxy_ids].sort, smart_proxies(:puppetmaster).id
+    assert_includes used_ids[:smart_proxy_ids].sort, smart_proxies(:realm).id
     assert_equal used_ids[:config_template_ids].sort, [config_templates(:mystring2).id]
   end
 
@@ -165,16 +168,17 @@ class OrganizationTest < ActiveSupport::TestCase
     organization_dup = organization.dup
     organization_dup.name = "organization_dup_name"
     assert organization_dup.save!
-    assert_equal, organization_dup.environment_ids = organization.environment_ids
-    assert_equal, organization_dup.hostgroup_ids = organization.hostgroup_ids
-    assert_equal, organization_dup.subnet_ids = organization.subnet_ids
-    assert_equal, organization_dup.domain_ids = organization.domain_ids
-    assert_equal, organization_dup.medium_ids = organization.medium_ids
-    assert_equal, organization_dup.user_ids = organization.user_ids
-    assert_equal, organization_dup.smart_proxy_ids = organization.smart_proxy_ids
-    assert_equal, organization_dup.config_template_ids = organization.config_template_ids
-    assert_equal, organization_dup.compute_resource_ids = organization.compute_resource_ids
-    assert_equal, organization_dup.location_ids = organization.location_ids
+    assert_equal organization_dup.environment_ids, organization.environment_ids
+    assert_equal organization_dup.hostgroup_ids, organization.hostgroup_ids
+    assert_equal organization_dup.subnet_ids, organization.subnet_ids
+    assert_equal organization_dup.domain_ids, organization.domain_ids
+    assert_equal organization_dup.medium_ids, organization.medium_ids
+    assert_equal organization_dup.user_ids, organization.user_ids
+    assert_equal organization_dup.smart_proxy_ids.sort, organization.smart_proxy_ids.sort
+    assert_equal organization_dup.config_template_ids, organization.config_template_ids
+    assert_equal organization_dup.compute_resource_ids, organization.compute_resource_ids
+    assert_equal organization_dup.realm_ids, organization.realm_ids
+    assert_equal organization_dup.location_ids, organization.location_ids
   end
 
   test "non-admin user is added to organization after creating it" do
@@ -198,5 +202,4 @@ class OrganizationTest < ActiveSupport::TestCase
       assert_equal [org1.id, org2.id].sort, Organization.my_organizations.pluck(:id).sort
     end
   end
-
 end

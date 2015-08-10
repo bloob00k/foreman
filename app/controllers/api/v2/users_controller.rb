@@ -1,15 +1,14 @@
 module Api
   module V2
     class UsersController < V2::BaseController
-
       wrap_parameters User, :include => (User.attribute_names + ['password'])
 
       before_filter :find_resource, :only => %w{show update destroy}
+      # find_resource needs to be defined prior to UsersMixin is included, it depends on @user
       include Foreman::Controller::UsersMixin
       include Api::Version2
       include Api::TaxonomyScope
       before_filter :find_optional_nested_object
-      before_filter :find_resource, :only => [:show, :update, :destroy]
 
       api :GET, "/users/", N_("List all users")
       api :GET, "/auth_source_ldaps/:auth_source_ldap_id/users", N_("List all users for LDAP authentication source")
@@ -44,6 +43,8 @@ module Api
           param :default_location_id, Integer if SETTINGS[:locations_enabled]
           param :default_organization_id, Integer if SETTINGS[:organizations_enabled]
           param :auth_source_id, Integer, :required => true
+          param :timezone, ActiveSupport::TimeZone.zones_map.keys, :required => false, :desc => N_("User's timezone")
+          param :locale, FastGettext.available_locales, :required => false, :desc => N_("User's preferred locale")
           param_group :taxonomies, ::Api::V2::BaseController
         end
       end
@@ -96,7 +97,6 @@ module Api
       def allowed_nested_id
         %w(auth_source_ldap_id role_id location_id organization_id usergroup_id)
       end
-
     end
   end
 end

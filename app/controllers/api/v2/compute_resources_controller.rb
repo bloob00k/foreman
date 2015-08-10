@@ -1,7 +1,6 @@
 module Api
   module V2
     class ComputeResourcesController < V2::BaseController
-
       wrap_parameters ComputeResource, :include => (ComputeResource.attribute_names + ['tenant', 'image_id', 'managed_ip', 'provider',
                                                    'template', 'templates', 'set_console_password', 'project', 'key_path', 'email', 'zone',
                                                    'display_type', 'ovirt_quota', 'public_key', 'region', 'server', 'datacenter', 'pubkey_hash',
@@ -32,15 +31,15 @@ module Api
         param :compute_resource, Hash, :required => true, :action_aware => true do
           param :name, String, :required => true
           param :provider, String, :desc => N_("Providers include %{providers}") # values are defined in apipie initializer
-          param :url, String, :required => true, :desc => N_("URL for Libvirt, Ovirt, and Openstack")
+          param :url, String, :desc => N_("URL for Libvirt, Ovirt, and Openstack")
           param :description, String
-          param :user, String, :desc => N_("Username for Ovirt, EC2, Vmware, Openstack. Access Key for EC2.")
-          param :password, String, :desc => N_("Password for Ovirt, EC2, Vmware, Openstack. Secret key for EC2")
-          param :uuid, String, :desc => N_("for Ovirt, Vmware Datacenter")
+          param :user, String, :desc => N_("Username for Ovirt, EC2, VMware, Openstack. Access Key for EC2.")
+          param :password, String, :desc => N_("Password for Ovirt, EC2, VMware, Openstack. Secret key for EC2")
+          param :uuid, String, :desc => N_("for Ovirt, VMware Datacenter")
           param :region, String, :desc => N_("for EC2 only")
           param :tenant, String, :desc => N_("for Openstack only")
-          param :server, String, :desc => N_("for Vmware")
-          param :set_console_password, :bool, :desc => N_("for Libvirt and Vmware only")
+          param :server, String, :desc => N_("for VMware")
+          param :set_console_password, :bool, :desc => N_("for Libvirt and VMware only")
           param_group :taxonomies, ::Api::V2::BaseController
         end
       end
@@ -52,7 +51,6 @@ module Api
         @compute_resource = ComputeResource.new_provider(params[:compute_resource])
         process_response @compute_resource.save
       end
-
 
       api :PUT, "/compute_resources/:id/", N_("Update a compute resource")
       param :id, String, :required => true

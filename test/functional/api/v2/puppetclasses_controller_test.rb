@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V2::PuppetclassesControllerTest < ActionController::TestCase
-
   valid_attrs = { :name => 'test_puppetclass' }
 
   test "should get index" do
@@ -9,7 +8,7 @@ class Api::V2::PuppetclassesControllerTest < ActionController::TestCase
     assert_response :success
     puppetclasses = ActiveSupport::JSON.decode(@response.body)
     assert !puppetclasses.empty?
-    assert puppetclasses['results'].kind_of?(Hash)
+    assert puppetclasses['results'].is_a?(Hash)
   end
 
   test "should get index with style=list" do
@@ -17,7 +16,7 @@ class Api::V2::PuppetclassesControllerTest < ActionController::TestCase
     assert_response :success
     puppetclasses = ActiveSupport::JSON.decode(@response.body)
     assert !puppetclasses.empty?
-    assert puppetclasses['results'].kind_of?(Array)
+    assert puppetclasses['results'].is_a?(Array)
   end
 
   test "should create puppetclass" do
@@ -43,7 +42,7 @@ class Api::V2::PuppetclassesControllerTest < ActionController::TestCase
 
   test "should get puppetclasses for given host only" do
     host1 = FactoryGirl.create(:host, :with_puppetclass)
-    host2 = FactoryGirl.create(:host, :with_puppetclass)
+    FactoryGirl.create(:host, :with_puppetclass)
     get :index, {:host_id => host1.to_param }
     assert_response :success
     puppetclasses = ActiveSupport::JSON.decode(@response.body)
@@ -138,5 +137,4 @@ class Api::V2::PuppetclassesControllerTest < ActionController::TestCase
     end
     assert_response :success
   end
-
 end

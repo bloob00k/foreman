@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class ComputeAttributeTest < ActiveSupport::TestCase
-
   setup do
     Fog.mock!
     User.current = users :admin
@@ -35,4 +34,19 @@ class ComputeAttributeTest < ActiveSupport::TestCase
     end
   end
 
+  describe "vm_interfaces" do
+    test "returns array of interface attributes" do
+      set = compute_attributes(:with_interfaces)
+      expected_vm_interfaces = [
+        {'attr' => 1},
+        {'attr' => 2}
+      ]
+      assert_equal expected_vm_interfaces, set.vm_interfaces
+    end
+
+    test "returns empty array if interface attributes are missing" do
+      set = compute_attributes(:one)
+      assert_empty set.vm_interfaces
+    end
+  end
 end

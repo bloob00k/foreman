@@ -189,17 +189,17 @@ class UsersControllerTest < ActionController::TestCase
   end
 
   test "should be able to create user without mail and update the mail later" do
-     user = User.create :login => "mailess", :mail=> nil, :auth_source => auth_sources(:one)
-     user.admin = true
-     user.save!(:validate => false)
+    user = User.create :login => "mailess", :mail=> nil, :auth_source => auth_sources(:one)
+    user.admin = true
+    user.save!(:validate => false)
 
-     update_hash = {"user"=>{
-       "login"  => user.login,
-       "mail"  => "you@have.mail"},
-       "id"     => user.id}
-     put :update, update_hash, set_session_user.merge(:user => user.id)
+    update_hash = {"user"=>{
+      "login"  => user.login,
+      "mail"  => "you@have.mail"},
+      "id"     => user.id}
+    put :update, update_hash, set_session_user.merge(:user => user.id)
 
-     assert !User.find_by_login(user.login).mail.blank?
+    assert !User.find_by_login(user.login).mail.blank?
   end
 
   test "should login external user" do
@@ -208,6 +208,18 @@ class UsersControllerTest < ActionController::TestCase
     @request.env['REMOTE_USER'] = users(:admin).login
     get :extlogin, {}, {}
     assert_redirected_to hosts_path
+  end
+
+  test "should logout external user" do
+    @sso = mock('dummy_sso')
+    @sso.stubs(:authenticated?).returns(true)
+    @sso.stubs(:logout_url).returns("/users/extlogout")
+    @sso.stubs(:current_user).returns(users(:admin).login)
+    @controller.stubs(:available_sso).returns(@sso)
+    @controller.stubs(:get_sso_method).returns(@sso)
+    get :extlogin, {}, {}
+    get :logout, {}, {}
+    assert_redirected_to '/users/extlogout'
   end
 
   test "should login external user preserving uri" do
@@ -305,6 +317,16 @@ class UsersControllerTest < ActionController::TestCase
     assert_equal taxonomies(:location1).id, session[:location_id]
     assert_equal taxonomies(:organization1).id, session[:organization_id]
     refute session[:foo], "session contains 'foo', but should have been reset"
+  end
+
+  test "#login renders login page" do
+    get :login
+    assert_response :success
+  end
+
+  test "#login renders login page with 401 status from parameter" do
+    get :login, :status => '401'
+    assert_response 401
   end
 
   context 'default taxonomies' do

@@ -124,7 +124,7 @@ class HostsControllerTest < ActionController::TestCase
     end
 
     teardown do
-     Host::Managed.any_instance.unstub(:setBuild)
+      Host::Managed.any_instance.unstub(:setBuild)
       @request.env['HTTP_REFERER'] = ''
     end
 
@@ -171,7 +171,7 @@ class HostsControllerTest < ActionController::TestCase
     ComputeResource.any_instance.stubs(:vm_compute_attributes_for).returns({})
     get :clone, {:id => Host.first.name}, set_session_user
     assert assigns(:clone_host)
-    assert_template 'new'
+    assert_template 'clone'
   end
 
   def test_clone_empties_fields
@@ -209,9 +209,10 @@ class HostsControllerTest < ActionController::TestCase
       @host2.update_attribute(:domain, domains(:yourdomain))
     end
     get :index, {}, set_session_user.merge(:user => @one.id)
+
     assert_response :success
     assert_match /#{@host1.shortname}/, @response.body
-    refute_match /#{@host2.name}/, @response.body
+    refute_match /#{@host2.shortname}/, @response.body
   end
 
   test 'user with view host rights and ownership is set should succeed in viewing host1 but fail for host2' do
@@ -288,7 +289,6 @@ class HostsControllerTest < ActionController::TestCase
     hosts.each { |host| assert_equal hostgroup, host.hostgroup }
   end
 
-
   test 'multiple hostgroup change by host names' do
     @request.env['HTTP_REFERER'] = hosts_path
     hosts = FactoryGirl.create_list(:host, 2)
@@ -310,7 +310,6 @@ class HostsControllerTest < ActionController::TestCase
       assert_equal host.hostgroup, hostgroup
     end
   end
-
 
   def setup_multiple_environments
     setup_user_and_host "edit"
@@ -400,7 +399,7 @@ class HostsControllerTest < ActionController::TestCase
   test "should get disabled hosts for a user with a fact_filter" do
     one = users(:one)
     one.roles << [roles(:manager)]
-    fn  = FactName.create :name =>"architecture"
+    FactName.create :name =>"architecture"
     get :disabled, {:user => one.id}, set_session_user
     assert_response :success
   end
@@ -465,9 +464,9 @@ class HostsControllerTest < ActionController::TestCase
     assert flash[:notice] == "Foreman now no longer manages the build cycle for #{@host.name}"
   end
 
-  test 'when ":restrict_registered_puppetmasters" is false, HTTP requests should be able to get externalNodes' do
+  test 'when ":restrict_registered_smart_proxies" is false, HTTP requests should be able to get externalNodes' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = false
+    Setting[:restrict_registered_smart_proxies] = false
     SETTINGS[:require_ssl] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
@@ -477,8 +476,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts with a registered smart proxy on should get externalNodes successfully' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = false
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
     get :externalNodes, {:name => @host.name, :format => "yml"}
@@ -487,8 +486,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts without a registered smart proxy on should not be able to get externalNodes' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = false
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['another.host'])
     get :externalNodes, {:name => @host.name, :format => "yml"}
@@ -497,8 +496,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts with a registered smart proxy and SSL cert should get externalNodes successfully' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
 
     @request.env['HTTPS'] = 'on'
     @request.env['SSL_CLIENT_S_DN'] = 'CN=else.where'
@@ -510,8 +509,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts in trusted hosts list and SSL cert should get externalNodes successfully' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     Setting[:trusted_puppetmaster_hosts] = ['else.where']
 
     @request.env['HTTPS'] = 'on'
@@ -524,8 +523,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts with comma-separated SSL DN should get externalNodes successfully' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     Setting[:trusted_puppetmaster_hosts] = ['foreman.example']
 
     @request.env['HTTPS'] = 'on'
@@ -538,8 +537,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts with slash-separated SSL DN should get externalNodes successfully' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     Setting[:trusted_puppetmaster_hosts] = ['foreman.linux.lab.local']
 
     @request.env['HTTPS'] = 'on'
@@ -552,8 +551,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts without a registered smart proxy but with an SSL cert should not be able to get externalNodes' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
 
     @request.env['HTTPS'] = 'on'
     @request.env['SSL_CLIENT_S_DN'] = 'CN=another.host'
@@ -564,8 +563,8 @@ class HostsControllerTest < ActionController::TestCase
 
   test 'hosts with an unverified SSL cert should not be able to get externalNodes' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
 
     @request.env['HTTPS'] = 'on'
     @request.env['SSL_CLIENT_S_DN'] = 'CN=else.where'
@@ -574,10 +573,10 @@ class HostsControllerTest < ActionController::TestCase
     assert_equal 403, @response.status
   end
 
-  test 'when "require_ssl_puppetmasters" and "require_ssl" are true, HTTP requests should not be able to get externalNodes' do
+  test 'when "require_ssl_smart_proxies" and "require_ssl" are true, HTTP requests should not be able to get externalNodes' do
     User.current = nil
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     SETTINGS[:require_ssl] = true
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
@@ -585,11 +584,11 @@ class HostsControllerTest < ActionController::TestCase
     assert_equal 403, @response.status
   end
 
-  test 'when "require_ssl_puppetmasters" is true and "require_ssl" is false, HTTP requests should be able to get externalNodes' do
+  test 'when "require_ssl_smart_proxies" is true and "require_ssl" is false, HTTP requests should be able to get externalNodes' do
     User.current = nil
-    # since require_ssl_puppetmasters is only applicable to HTTPS connections, both should be set
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    # since require_ssl_smart_proxies is only applicable to HTTPS connections, both should be set
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     SETTINGS[:require_ssl] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['else.where'])
@@ -598,8 +597,8 @@ class HostsControllerTest < ActionController::TestCase
   end
 
   test 'authenticated users over HTTP should be able to get externalNodes' do
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     SETTINGS[:require_ssl] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['users.host'])
@@ -608,8 +607,8 @@ class HostsControllerTest < ActionController::TestCase
   end
 
   test 'authenticated users over HTTPS should be able to get externalNodes' do
-    Setting[:restrict_registered_puppetmasters] = true
-    Setting[:require_ssl_puppetmasters] = true
+    Setting[:restrict_registered_smart_proxies] = true
+    Setting[:require_ssl_smart_proxies] = true
     SETTINGS[:require_ssl] = false
 
     Resolv.any_instance.stubs(:getnames).returns(['users.host'])
@@ -757,10 +756,11 @@ class HostsControllerTest < ActionController::TestCase
   end
 
   test "can change sti type to valid subtype" do
-    class Host::Valid < Host::Base; end
-    put :update, { :commit => "Update", :id => @host.name, :host => {:type => "Host::Valid"} }, set_session_user
-    @host = Host::Base.find(@host.id)
-    assert_equal "Host::Valid", @host.type
+    class Host::Valid < Host::Managed; end
+    host = FactoryGirl.create(:host)
+    put :update, { :commit => "Update", :id => host.name, :host => {:type => "Host::Valid"} }, set_session_user
+    host = Host::Base.find(host.id)
+    assert_equal "Host::Valid", host.type
   end
 
   test "cannot change sti type to invalid subtype" do
@@ -833,7 +833,36 @@ class HostsControllerTest < ActionController::TestCase
     assert_template 'review_before_build'
   end
 
+  test 'template_used returns templates with interfaces' do
+    @host.setBuild
+    nic=FactoryGirl.create(:nic_managed, :host => @host)
+    attrs = @host.attributes
+    attrs[:interfaces_attributes] = nic.attributes
+    xhr :put, :template_used, {:provisioning => 'build', :host => attrs }, set_session_user
+    assert_response :success
+    assert_template :partial => '_provisioning'
+  end
+
+  test 'template_used returns templates with host parameters' do
+    @host.setBuild
+    attrs = @host.attributes
+    attrs[:host_parameters_attributes] = {'0' => {:name => 'foo', :value => 'bar', :id => '34'}}
+    xhr :put, :template_used, {:provisioning => 'build', :host => attrs }, set_session_user
+    assert_response :success
+    assert_template :partial => '_provisioning'
+  end
+
+  test 'process_taxonomy renders a host from the params correctly' do
+    nic=FactoryGirl.create(:nic_managed, :host => @host)
+    attrs = @host.attributes
+    attrs[:interfaces_attributes] = nic.attributes
+    xhr :put, :process_taxonomy, { :host => attrs }, set_session_user
+    assert_response :success
+    assert_template :partial => '_form'
+  end
+
   private
+
   def initialize_host
     User.current = users(:admin)
     disable_orchestration

@@ -25,6 +25,8 @@ class HostMailerTest < ActionMailer::TestCase
     # we do it here:
     Environment.reset_counters(@env, :hosts)
     @env.reload
+
+    ActionMailer::Base.deliveries = []
   end
 
   test "mail should have the specified recipient" do
@@ -49,4 +51,13 @@ class HostMailerTest < ActionMailer::TestCase
     assert HostMailer.summary(@options).deliver.body.include?(@host.name)
   end
 
+  test 'error_state sends mail with correct headers' do
+    report = FactoryGirl.create(:report)
+    user = FactoryGirl.create(:user, :with_mail)
+    mail = HostMailer.error_state(report, :user => user).deliver
+    assert_includes mail.from, Setting["email_reply_address"]
+    assert_includes mail.to, user.mail
+    assert_includes mail.subject, report.host.name
+    assert_present mail.body
+  end
 end

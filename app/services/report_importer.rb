@@ -8,6 +8,10 @@ class ReportImporter
     importer.report
   end
 
+  def self.report_features
+    ['Puppet', 'Chef Proxy']
+  end
+
   def initialize(raw, proxy_id = nil)
     raise ::Foreman::Exception.new(_('Invalid report')) unless raw.is_a?(Hash)
     @raw      = raw
@@ -52,6 +56,7 @@ class ReportImporter
   end
 
   private
+
   attr_reader :raw, :proxy_id
 
   def name
@@ -94,10 +99,15 @@ class ReportImporter
     if report.error?
       # found a report with errors
       # notify via email IF enabled is set to true
-      logger.warn "#{name} is disabled - skipping." and return if host.disabled?
+      logger.warn "#{name} is disabled - skipping alert" and return if host.disabled?
 
-      logger.debug 'error detected, checking if we need to send an email alert'
-      MailNotification[:puppet_error_state].deliver(report.id)
+      owners = host.owner.present? ? host.owner.recipients_for(:puppet_error_state) : []
+      if owners.present?
+        logger.debug "sending alert to #{owners.map(&:login).join(',')}"
+        MailNotification[:puppet_error_state].deliver(report, :users => owners)
+      else
+        logger.debug "no owner or recipients for alert on #{name}"
+      end
     end
   end
 end

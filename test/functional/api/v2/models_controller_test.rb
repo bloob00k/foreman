@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V2::ModelsControllerTest < ActionController::TestCase
-
   valid_attrs = { :name => "new model" }
 
   test "should get index" do
@@ -33,7 +32,6 @@ class Api::V2::ModelsControllerTest < ActionController::TestCase
   end
 
   test "should destroy model" do
-    id = Model.first.id
     assert_difference('Model.count', -1) do
       delete :destroy, { :id => models(:one).to_param }
     end

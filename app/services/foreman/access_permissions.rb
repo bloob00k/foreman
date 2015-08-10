@@ -117,7 +117,7 @@ Foreman::AccessControl.map do |permission_set|
                                       }
     map.permission :create_templates,  {:config_templates => [:new, :create, :clone],
                                         :"api/v1/config_templates" => [:create],
-                                        :"api/v2/config_templates" => [:create],
+                                        :"api/v2/config_templates" => [:create, :clone],
                                         :"api/v2/template_combinations" => [:create]
                                       }
     map.permission :edit_templates,    {:config_templates => [:edit, :update],
@@ -199,7 +199,6 @@ Foreman::AccessControl.map do |permission_set|
                                            :"api/v1/smart_proxies" => [:import_puppetclasses],
                                            :"api/v2/smart_proxies" => [:import_puppetclasses]
                                             }
-
   end
 
   permission_set.security_block :external_variables do |map|
@@ -308,7 +307,7 @@ Foreman::AccessControl.map do |permission_set|
   permission_set.security_block :hosts do |map|
     ajax_actions = [:architecture_selected, :compute_resource_selected, :domain_selected, :environment_selected,
       :hostgroup_or_environment_selected, :medium_selected, :os_selected, :use_image_selected, :process_hostgroup,
-      :process_taxonomy, :current_parameters, :puppetclass_parameters, :template_used]
+      :process_taxonomy, :current_parameters, :puppetclass_parameters, :template_used, :interfaces]
     cr_ajax_actions = [:cluster_selected, :template_selected, :provider_selected]
     pc_ajax_actions = [:parameters]
     subnets_ajax_actions = [:freeip]
@@ -316,7 +315,7 @@ Foreman::AccessControl.map do |permission_set|
 
     map.permission :view_hosts,    {:hosts => [:index, :show, :errors, :active, :out_of_sync, :disabled, :pending, :vm,
                                       :externalNodes, :pxe_config, :storeconfig_klasses, :auto_complete_search, :bmc,
-                                      :runtime, :resources, :templates, :overview],
+                                      :runtime, :resources, :templates, :overview, :nics],
                                     :dashboard => [:OutOfSync, :errors, :active],
                                     :unattended => [:template, :provision],
                                      :"api/v1/hosts" => [:index, :show, :status],

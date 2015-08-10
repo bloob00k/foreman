@@ -23,12 +23,20 @@ class LookupValue < ActiveRecord::Base
   scoped_search :on => :match, :complete_value => true
   scoped_search :in => :lookup_key, :on => :key, :rename => :lookup_key, :complete_value => true
 
+  def value=(val)
+    if val.is_a?(HashWithIndifferentAccess)
+      super(val.deep_to_hash)
+    else
+      super
+    end
+  end
+
   def name
     match
   end
 
   def value_before_type_cast
-    return self.value if lookup_key.nil?
+    return self.value if lookup_key.nil? || lookup_key.contains_erb?(self.value)
     lookup_key.value_before_type_cast self.value
   end
 
@@ -42,36 +50,45 @@ class LookupValue < ActiveRecord::Base
   def validate_and_cast_value
     return true if self.marked_for_destruction? or !self.value.is_a? String
     begin
-      self.value = lookup_key.cast_validate_value self.value
+      unless self.lookup_key.contains_erb?(value)
+        self.value = lookup_key.cast_validate_value self.value
+      end
       true
     rescue StandardError, SyntaxError => e
+      logger.error e.message
+      logger.error e.backtrace.join("\n")
       errors.add(:value, _("is invalid %s") % lookup_key.key_type)
       false
     end
   end
 
   def validate_regexp
-    return true unless (lookup_key.validator_type == 'regexp')
-    errors.add(:value, _("is invalid")) and return false unless (value =~ /#{lookup_key.validator_rule}/)
+    return true if (lookup_key.validator_type != 'regexp' || (lookup_key.contains_erb?(value) && Setting[:interpolate_erb_in_parameters]))
+    valid = (value =~ /#{lookup_key.validator_rule}/)
+    errors.add(:value, _("is invalid")) unless valid
+    valid
   end
 
   def validate_list
-    return true unless (lookup_key.validator_type == 'list')
-    errors.add(:value, _("%{value} is not one of %{rules}") % { :value => value, :rules => lookup_key.validator_rule }) and return false unless lookup_key.validator_rule.split(LookupKey::KEY_DELM).map(&:strip).include?(value)
+    return true if (lookup_key.validator_type != 'list' || (lookup_key.contains_erb?(value) && Setting[:interpolate_erb_in_parameters]))
+    valid = lookup_key.validator_rule.split(LookupKey::KEY_DELM).map(&:strip).include?(value)
+    errors.add(:value, _("%{value} is not one of %{rules}") % { :value => value, :rules => lookup_key.validator_rule }) unless valid
+    valid
   end
 
   def ensure_fqdn_exists
-    md = match.match(/\Afqdn=(.*)/)
+    md = match.match(/fqdn=(.*)/)
     return true unless md
-    return true if Host.unscoped.find_by_name(md[1]) || host_or_hostgroup.try(:new_record?)
-    errors.add(:match, _("%{match} does not match an existing host") % { :match => match }) and return false
+    fqdn = md[1].split(LookupKey::KEY_DELM)[0]
+    return true if Host.unscoped.find_by_name(fqdn) || host_or_hostgroup.try(:new_record?)
+    errors.add(:match, _("%{match} does not match an existing host") % { :match => "fqdn=#{fqdn}" }) and return false
   end
 
   def ensure_hostgroup_exists
-    md = match.match(/\Ahostgroup=(.*)/)
+    md = match.match(/hostgroup=(.*)/)
     return true unless md
-    return true if Hostgroup.unscoped.find_by_name(md[1]) || Hostgroup.unscoped.find_by_title(md[1]) || host_or_hostgroup.try(:new_record?)
-    errors.add(:match, _("%{match} does not match an existing host group") % { :match => match }) and return false
+    hostgroup = md[1].split(LookupKey::KEY_DELM)[0]
+    return true if Hostgroup.unscoped.find_by_name(hostgroup) || Hostgroup.unscoped.find_by_title(hostgroup) || host_or_hostgroup.try(:new_record?)
+    errors.add(:match, _("%{match} does not match an existing host group") % { :match => "hostgroup=#{hostgroup}" }) and return false
   end
-
 end

@@ -14,7 +14,7 @@ class Environment < ActiveRecord::Base
   has_many :hostgroups
   has_many :trends, :as => :trendable, :class_name => "ForemanTrend"
 
-  validates :name, :uniqueness => true, :presence => true, :format => { :with => /\A[\w\d]+\Z/, :message => N_("is alphanumeric and cannot contain spaces") }
+  validates :name, :uniqueness => true, :presence => true, :alphanumeric => true
   has_many :template_combinations, :dependent => :destroy
   has_many :config_templates, :through => :template_combinations
 
@@ -31,12 +31,10 @@ class Environment < ActiveRecord::Base
   scoped_search :on => :hostgroups_count
 
   class << self
-
     #TODO: this needs to be removed, as PuppetDOC generation no longer works
     # if the manifests are not on the foreman host
     # returns an hash of all puppet environments and their relative paths
     def puppetEnvs(proxy = nil)
-
       url = (proxy || SmartProxy.with_features("Puppet").first).try(:url)
       raise ::Foreman::Exception.new(N_("Can't find a valid Foreman Proxy with a Puppet feature")) if url.blank?
       proxy = ProxyAPI::Puppet.new :url => url
@@ -47,7 +45,5 @@ class Environment < ActiveRecord::Base
         }]]
       }]
     end
-
   end
-
 end

@@ -9,7 +9,7 @@ class UsersController < ApplicationController
   skip_before_filter :update_admin_flag, :only => :update
 
   def index
-    @users = User.authorized(:view_users).except_hidden.search_for(params[:search], :order => params[:order]).includes(:auth_source).paginate(:page => params[:page])
+    @users = User.authorized(:view_users).except_hidden.search_for(params[:search], :order => params[:order]).includes(:auth_source, :cached_usergroups).paginate(:page => params[:page])
   end
 
   def new
@@ -79,7 +79,7 @@ class UsersController < ApplicationController
         login_user(user)
       end
     else
-      if params[:status] && params[:status] == 401
+      if params[:status] && params[:status] == "401"
         render :layout => 'login', :status => params[:status]
       else
         render :layout => 'login'
@@ -127,5 +127,4 @@ class UsersController < ApplicationController
     TopbarSweeper.expire_cache(self)
     redirect_to (uri || hosts_path)
   end
-
 end

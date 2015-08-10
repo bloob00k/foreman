@@ -1,13 +1,12 @@
 module ComputeResourcesVmsHelper
-
   def vm_power_actions(host, vm)
     button_group(
       if vm
-         html_opts = vm.ready? ? {:confirm => _('Are you sure?'), :class => "btn btn-danger"} : {:class => "btn btn-success"}
-         link_to_if_authorized _("Power%s") % state(vm.ready?), hash_for_power_host_path(:power_action => vm.ready? ? :stop : :start).merge(:auth_object => host, :permission => 'power_hosts'),
-         html_opts.merge(:method => :put)
+        html_opts = vm.ready? ? {:confirm => _('Are you sure?'), :class => "btn btn-danger"} : {:class => "btn btn-success"}
+        link_to_if_authorized _("Power%s") % state(vm.ready?), hash_for_power_host_path(:power_action => vm.ready? ? :stop : :start).merge(:auth_object => host, :permission => 'power_hosts'),
+        html_opts.merge(:method => :put)
       else
-         link_to(_("Unknown Power State"), '#', :disabled => true, :class => "btn btn-warning")
+        link_to(_("Unknown Power State"), '#', :disabled => true, :class => "btn btn-warning")
       end
     )
   end
@@ -37,7 +36,7 @@ module ComputeResourcesVmsHelper
         when Fog::Time, Time
           _("%s ago") % time_ago_in_words(value)
         when nil
-            _("N/A")
+          _("N/A")
         else
           method == :memory ? number_to_human_size(value) : value.to_s
         end
@@ -70,7 +69,6 @@ module ComputeResourcesVmsHelper
 
   def libvirt_networks(compute)
     networks   = compute.networks
-    interfaces = compute.interfaces
     select     = []
     select << [_('Physical (Bridge)'), :bridge]
     select << [_('Virtual (NAT)'), :network] if networks.any?
@@ -117,7 +115,7 @@ module ComputeResourcesVmsHelper
   end
 
   def vpc_security_group_hash(security_groups)
-    vpc_sg_hash = Hash.new
+    vpc_sg_hash = {}
     security_groups.each{ |sg|
       vpc_id = sg.vpc_id || 'ec2'
       ( vpc_sg_hash[vpc_id] ||= []) << {:group_name => sg.name, :group_id => sg.group_id}
@@ -126,7 +124,7 @@ module ComputeResourcesVmsHelper
   end
 
   def subnet_vpc_hash(subnets)
-    subnet_vpc_hash = Hash.new
+    subnet_vpc_hash = {}
     subnets.each{ |sub| subnet_vpc_hash[sub.subnet_id] = {:vpc_id =>sub.vpc_id, :subnet_name => sub.tag_set["Name"] || sub.subnet_id} }
     subnet_vpc_hash
   end
@@ -143,4 +141,7 @@ module ComputeResourcesVmsHelper
     controller_name != 'hosts' && controller_name != 'compute_attributes'
   end
 
+  def new_host?(host)
+    host.try(:new_record?)
+  end
 end

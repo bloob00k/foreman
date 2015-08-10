@@ -3,11 +3,9 @@ require 'spork'
 # $LOAD_PATH required for testdrb party of spork-minitest
 $LOAD_PATH << "test"
 
-unless RUBY_VERSION =~ /^1\.8/
-  require 'simplecov'
-  SimpleCov.start 'rails' do
-    add_group 'API', 'app/controllers/api'
-  end
+require 'simplecov'
+SimpleCov.start 'rails' do
+  add_group 'API', 'app/controllers/api'
 end
 
 Spork.prefork do
@@ -25,6 +23,14 @@ Spork.prefork do
   require "minitest/autorun"
   require 'capybara/rails'
   require 'factory_girl_rails'
+  require 'capybara/poltergeist'
+
+  Capybara.register_driver :poltergeist do |app|
+    Capybara::Poltergeist::Driver.new(app, {:js_errors => true, :timeout => 60})
+  end
+  Capybara.default_wait_time = 30
+
+  Capybara.javascript_driver = :poltergeist
 
   # Use our custom test runner, and register a fake plugin to skip a specific test
   Foreman::Plugin.register :skip_test do
@@ -50,6 +56,7 @@ Spork.prefork do
 
     setup :begin_gc_deferment
     teardown :reconsider_gc_deferment
+    teardown :clear_current_user
 
     DEFERRED_GC_THRESHOLD = (ENV['DEFER_GC'] || 1.0).to_f
 
@@ -67,6 +74,10 @@ Spork.prefork do
 
         @@last_gc_run = Time.now
       end
+    end
+
+    def clear_current_user
+      User.current = nil
     end
 
     # for backwards compatibility to between Minitest syntax
@@ -101,7 +112,7 @@ Spork.prefork do
     end
 
     def in_taxonomy(taxonomy)
-      new_taxonomy = taxonomies(taxonomy)
+      new_taxonomy = taxonomy.is_a?(Taxonomy) ? taxonomy : taxonomies(taxonomy)
       saved_taxonomy = new_taxonomy.class.current
       new_taxonomy.class.current = new_taxonomy
       result = yield
@@ -167,6 +178,7 @@ Spork.prefork do
       Net::DHCP::Record.any_instance.stubs(:conflicting?).returns(false)
       ProxyAPI::Puppet.any_instance.stubs(:environments).returns(["production"])
       ProxyAPI::DHCP.any_instance.stubs(:unused_ip).returns('127.0.0.1')
+      ProxyAPI::TFTP.any_instance.stubs(:bootServer).returns('127.0.0.1')
     end
 
     def disable_orchestration
@@ -210,6 +222,10 @@ Spork.prefork do
       result = yield
       ENV.update old_values
       result
+    end
+
+    def next_mac(mac)
+      mac.tr(':','').to_i(16).succ.to_s(16).rjust(12, '0').scan(/../).join(':')
     end
   end
 
@@ -272,7 +288,6 @@ Spork.prefork do
       Location.all_import_missing_ids
       Organization.all_import_missing_ids
     end
-
   end
 
   class ActionView::TestCase
@@ -283,7 +298,6 @@ Spork.prefork do
     support_file = "#{engine.root}/test/support/foreman_test_helper_additions.rb"
     require support_file if File.exist?(support_file)
   end
-
 end
 
 Spork.each_run do
@@ -314,7 +328,6 @@ Spork.each_run do
   end
 
   class ActionDispatch::IntegrationTest
-
     setup :login_admin
 
     teardown do
@@ -331,7 +344,5 @@ Spork.each_run do
       fill_in "login_password", :with => "secret"
       click_button "Login"
     end
-
   end
-
 end

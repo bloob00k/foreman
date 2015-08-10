@@ -19,11 +19,13 @@ class PuppetFactParser < FactParser
             orel = "99"
         end
       elsif os_name[/AIX/i]
-        majoraix, tlaix, spaix, yearaix = orel.split("-")
+        majoraix, tlaix, spaix, _yearaix = orel.split("-")
         orel = majoraix + "." + tlaix + spaix
       elsif os_name[/JUNOS/i]
         majorjunos, minorjunos = orel.split("R")
         orel = majorjunos + "." + minorjunos
+      elsif os_name[/FreeBSD/i]
+        orel.gsub!(/\-RELEASE\-p[0-9]+/, '')
       end
       major, minor = orel.split(".")
       major.to_s.gsub!(/\D/, '') unless is_numeric? major
@@ -77,15 +79,6 @@ class PuppetFactParser < FactParser
     Domain.find_or_create_by_name name unless name.blank?
   end
 
-  def primary_interface
-    mac = facts[:macaddress]
-    ip = facts[:ipaddress]
-    interfaces.each do |int, values|
-      return int.to_s if (values[:macaddress] == mac && values[:ipaddress] == ip)
-    end
-    nil
-  end
-
   def ipmi_interface
     ipmi = facts.select { |name, _| name =~ /\Aipmi_(.*)\Z/ }.map { |name, value| [name.sub(/\Aipmi_/, ''), value] }
     Hash[ipmi].with_indifferent_access
@@ -96,7 +89,7 @@ class PuppetFactParser < FactParser
   def interfaces
     interfaces = super
 
-    underscore_device_regexp = /(.*)_(\d+)/
+    underscore_device_regexp = /\A([^_]*)_(\d+)\z/
     interfaces.clone.each do |identifier, _|
       matches = identifier.match(underscore_device_regexp)
       next unless matches
@@ -107,16 +100,12 @@ class PuppetFactParser < FactParser
     interfaces
   end
 
-  def mac
-    facts[:macaddress] == "00:00:00:00:00:00" ? nil : facts[:macaddress]
-  end
-
-  def ip
-    facts[:ipaddress]
-  end
-
   def certname
     facts[:clientcert]
+  end
+
+  def support_interfaces_parsing?
+    true
   end
 
   private

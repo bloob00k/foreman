@@ -11,6 +11,7 @@ module Orchestration::SSHProvision
   end
 
   protected
+
   def queue_ssh_provision
     return unless ssh_provision? and errors.empty?
     new_record? ? queue_ssh_provision_create : queue_ssh_provision_update
@@ -18,7 +19,6 @@ module Orchestration::SSHProvision
 
   # I guess this is not going to happen on create as we might not have an ip address yet.
   def queue_ssh_provision_create
-
     post_queue.create(:name   => _("Prepare post installation script for %s") % self, :priority => 2000,
                  :action => [self, :setSSHProvisionScript])
     post_queue.create(:name   => _("Wait for %s to come online") % self, :priority => 2001,
@@ -42,7 +42,7 @@ module Orchestration::SSHProvision
   def delSSHProvisionScript; end
 
   def setSSHWaitForResponse
-    logger.info "Starting SSH provisioning script - waiting for #{ip} to respond"
+    logger.info "Starting SSH provisioning script - waiting for #{provision_ip} to respond"
     if compute_resource.respond_to?(:key_pair) and compute_resource.key_pair.try(:secret)
       credentials = { :key_data => [compute_resource.key_pair.secret] }
     elsif vm.respond_to?(:password) and vm.password.present?
@@ -52,7 +52,7 @@ module Orchestration::SSHProvision
     else
       raise ::Foreman::Exception.new(N_('Unable to find proper authentication method'))
     end
-    self.client = Foreman::Provision::SSH.new ip, image.username, { :template => template_file.path, :uuid => uuid }.merge(credentials)
+    self.client = Foreman::Provision::SSH.new provision_ip, image.username, { :template => template_file.path, :uuid => uuid }.merge(credentials)
 
   rescue => e
     failure _("Failed to login via SSH to %{name}: %{e}") % { :name => name, :e => e }, e.backtrace
@@ -76,7 +76,7 @@ module Orchestration::SSHProvision
   end
 
   def setSSHProvision
-    logger.info "SSH connection established to #{ip} - executing template"
+    logger.info "SSH connection established to #{provision_ip} - executing template"
     if client.deploy!
       # since we are in a after_commit callback, we need to fetch our host again
       h = Host.find(id)
@@ -104,10 +104,15 @@ module Orchestration::SSHProvision
     begin
       template = configTemplate(:kind => "finish")
     rescue => e
+      logger.error e.message
+      logger.error e.backtrace.join("\n")
       status = false
     end
     status = false if template.nil?
     failure(_("No finish templates were found for this host, make sure you define at least one in your %s settings") % os ) unless status
   end
 
+  def provision_ip
+    provision_interface.ip
+  end
 end

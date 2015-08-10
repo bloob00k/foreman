@@ -1,7 +1,6 @@
 module AuditsHelper
-
-  MainObjects = %w(Host Hostgroup User Operatingsystem Environment Puppetclass Parameter Architecture ComputeResource ConfigTemplate ComputeProfile ComputeAttribute
-                   Location Organization Domain Subnet SmartProxy AuthSource Image Role Usergroup Bookmark ConfigGroup)
+  MAIN_OBJECTS = %w(Host Hostgroup User Operatingsystem Environment Puppetclass Parameter Architecture ComputeResource ConfigTemplate ComputeProfile ComputeAttribute
+                    Location Organization Domain Subnet SmartProxy AuthSource Image Role Usergroup Bookmark ConfigGroup)
 
   # lookup the Model representing the numerical id and return its label
   def id_to_label(name, change)
@@ -140,9 +139,9 @@ module AuditsHelper
   end
 
   private
+
   def main_object?(audit)
     type = audit.auditable_type.split("::").last rescue ''
-    MainObjects.include?(type)
+    MAIN_OBJECTS.include?(type)
   end
-
 end

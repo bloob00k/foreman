@@ -7,7 +7,7 @@ class ComputeResourcesController < ApplicationController
   #This can happen in development when removing a plugin
   rescue_from ActiveRecord::SubclassNotFound do |e|
     type = (e.to_s =~ /failed to locate the subclass: '((\w|::)+)'/) ? $1 : 'STI-Type'
-    render :text => (e.to_s+"<br><b>run ComputeResource.delete_all(:type=>'#{type}') to recover.</b>").html_safe, :status=> 500
+    render :text => (e.to_s+"<br><b>run ComputeResource.delete_all(:type=>'#{type}') to recover.</b>").html_safe, :status=> :internal_server_error
   end
 
   def index
@@ -58,7 +58,7 @@ class ComputeResourcesController < ApplicationController
   def update
     params[:compute_resource].except!(:password) if params[:compute_resource][:password].blank?
     if @compute_resource.update_attributes(params[:compute_resource])
-      process_success
+      process_success :success_redirect => compute_resources_path
     else
       process_error
     end
@@ -126,5 +126,4 @@ class ComputeResourcesController < ApplicationController
         super
     end
   end
-
 end

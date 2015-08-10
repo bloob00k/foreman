@@ -11,6 +11,7 @@ module Foreman::Controller::UsersMixin
   end
 
   protected
+
   def set_admin_on_creation
     admin = params[:user].delete :admin
     @user = User.new(params[:user]) { |u| u.admin = admin unless admin.nil? }
@@ -27,6 +28,7 @@ module Foreman::Controller::UsersMixin
                              :firstname,
                              :lastname,
                              :locale,
+                             :timezone,
                              :default_organization_id,
                              :default_location_id,
                              :user_mail_notifications_attributes,

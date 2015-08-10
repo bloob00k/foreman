@@ -15,16 +15,18 @@ class HostsController < ApplicationController
                         multiple_enable submit_multiple_enable multiple_puppetrun
                         update_multiple_puppetrun multiple_disassociate update_multiple_disassociate)
 
-  add_puppetmaster_filters PUPPETMASTER_ACTIONS
+  add_smart_proxy_filters PUPPETMASTER_ACTIONS, :features => ['Puppet']
+
   before_filter :ajax_request, :only => AJAX_REQUESTS
   before_filter :find_resource, :only => [:show, :clone, :edit, :update, :destroy, :puppetrun, :review_before_build,
                                          :setBuild, :cancelBuild, :power, :overview, :bmc, :vm,
-                                         :runtime, :resources, :templates, :ipmi_boot, :console,
+                                         :runtime, :resources, :templates, :nics, :ipmi_boot, :console,
                                          :toggle_manage, :pxe_config, :storeconfig_klasses, :disassociate]
 
   before_filter :taxonomy_scope, :only => [:new, :edit] + AJAX_REQUESTS
   before_filter :set_host_type, :only => [:update]
   before_filter :find_multiple, :only => MULTIPLE_ACTIONS
+  before_filter :cleanup_passwords, :only => :update
   helper :hosts, :reports, :interfaces
 
   def index(title = nil)
@@ -73,7 +75,6 @@ class HostsController < ApplicationController
     load_vars_for_ajax
     flash[:warning] = _("The marked fields will need reviewing")
     @host.valid?
-    render :action => :new
   end
 
   def create
@@ -81,7 +82,7 @@ class HostsController < ApplicationController
     @host.managed = true if (params[:host] && params[:host][:managed].nil?)
     forward_url_options
     if @host.save
-      process_success :success_redirect => host_path(@host), :redirect_xhr => request.xhr?
+      process_success :success_redirect => host_path(@host)
     else
       load_vars_for_ajax
       offer_to_overwrite_conflicts
@@ -96,15 +97,8 @@ class HostsController < ApplicationController
   def update
     forward_url_options
     Taxonomy.no_taxonomy_scope do
-      # remove from hash :root_pass and bmc :password if blank?
-      params[:host].except!(:root_pass) if params[:host][:root_pass].blank?
-      if @host.type == "Host::Managed" && params[:host][:interfaces_attributes]
-        params[:host][:interfaces_attributes].each do |k, v|
-          params[:host][:interfaces_attributes]["#{k}"].except!(:password) if params[:host][:interfaces_attributes]["#{k}"][:password].blank?
-        end
-      end
       if @host.update_attributes(params[:host])
-        process_success :success_redirect => host_path(@host), :redirect_xhr => request.xhr?
+        process_success :success_redirect => host_path(@host)
       else
         taxonomy_scope
         load_vars_for_ajax
@@ -116,7 +110,7 @@ class HostsController < ApplicationController
 
   def destroy
     if @host.destroy
-      process_success
+      process_success :success_redirect => hosts_path
     else
       process_error
     end
@@ -131,6 +125,15 @@ class HostsController < ApplicationController
       render :partial => "compute", :locals => { :compute_resource => compute_resource,
                                                  :vm_attrs         => compute_resource.compute_profile_attributes_for(compute_profile_id) }
     end
+  end
+
+  def interfaces
+    @host = Host.new params[:host]
+
+    merge = InterfaceMerge.new
+    merge.run(@host.interfaces, @host.compute_resource.try(:compute_profile_for, @host.compute_profile_id))
+
+    render :partial => "interfaces_tab"
   end
 
   def hostgroup_or_environment_selected
@@ -171,10 +174,11 @@ class HostsController < ApplicationController
         format.html { render :text => "<pre>#{ERB::Util.html_escape(@host.info.to_yaml)}</pre>" }
         format.yml { render :text => @host.info.to_yaml }
       end
-    rescue
-      # failed
-      logger.warn "Failed to generate external nodes for #{@host} with #{$ERROR_INFO}"
-      render :text => _('Unable to generate output, Check log files\n'), :status => 412 and return
+    rescue => e
+      logger.warn "Failed to generate external nodes for #{@host} with #{e}"
+      logger.debug(e.backtrace.join("\n"))
+      render :text => _('Unable to generate output, Check log files'),
+             :status => :precondition_failed
     end
   end
 
@@ -265,6 +269,12 @@ class HostsController < ApplicationController
     render :text => view_context.show_templates
   rescue ActionView::Template::Error => exception
     process_ajax_error exception, 'fetch templates information'
+  end
+
+  def nics
+    render :partial => 'nics'
+  rescue ActionView::Template::Error => exception
+    process_ajax_error exception, 'fetch interfaces information'
   end
 
   def ipmi_boot
@@ -529,7 +539,7 @@ class HostsController < ApplicationController
 
   def process_taxonomy
     return head(:not_found) unless @location || @organization
-    @host = Host.new(params[:host])
+    @host = Host.new(params[:host].except(:interfaces_attributes))
     # revert compute resource to "Bare Metal" (nil) if selected
     # compute resource is not included taxonomy
     Taxonomy.as_taxonomy @organization, @location do
@@ -540,7 +550,7 @@ class HostsController < ApplicationController
   end
 
   def template_used
-    host      = Host.new(params[:host])
+    host      = Host.new(params[:host].except(:host_parameters_attributes, :interfaces_attributes))
     templates = host.available_template_kinds(params[:provisioning])
     return not_found if templates.empty?
     render :partial => 'provisioning', :locals => { :templates => templates }
@@ -554,7 +564,7 @@ class HostsController < ApplicationController
 
   def action_permission
     case params[:action]
-      when 'clone', 'externalNodes', 'overview', 'bmc', 'vm', 'runtime', 'resources', 'templates',
+      when 'clone', 'externalNodes', 'overview', 'bmc', 'vm', 'runtime', 'resources', 'templates', 'nics',
           'pxe_config', 'storeconfig_klasses', 'active', 'errors', 'out_of_sync', 'pending', 'disabled'
         :view
       when 'puppetrun', 'multiple_puppetrun', 'update_multiple_puppetrun'
@@ -585,7 +595,7 @@ class HostsController < ApplicationController
   def refresh_host
     @host = Host::Base.authorized(:view_hosts, Host).find_by_id(params['host_id'])
     if @host
-      unless @host.kind_of?(Host::Managed)
+      unless @host.is_a?(Host::Managed)
         @host      = @host.becomes(Host::Managed)
         @host.type = "Host::Managed"
       end
@@ -600,7 +610,7 @@ class HostsController < ApplicationController
   def set_host_type
     return unless params[:host] and params[:host][:type]
     type = params[:host].delete(:type) #important, otherwise mass assignment will save the type.
-    if type.constantize.new.kind_of?(Host::Base)
+    if type.constantize.new.is_a?(Host::Base)
       @host      = @host.becomes(type.constantize)
       @host.type = type
     else
@@ -625,14 +635,8 @@ class HostsController < ApplicationController
     @organization ||= Organization.find_by_id(params[:organization_id]) if params[:organization_id]
     @location     ||= Location.find_by_id(params[:location_id])         if params[:location_id]
 
-    if SETTINGS[:organizations_enabled]
-      @organization ||= Organization.current
-      @organization ||= Organization.my_organizations.first
-    end
-    if SETTINGS[:locations_enabled]
-      @location ||= Location.current
-      @location ||= Location.my_locations.first
-    end
+    @organization ||= Organization.current if SETTINGS[:organizations_enabled]
+    @location     ||= Location.current     if SETTINGS[:locations_enabled]
   end
 
   # overwrite application_controller
@@ -713,4 +717,14 @@ class HostsController < ApplicationController
     @host.overwrite = "true" if @host.errors.any? and @host.errors.are_all_conflicts?
   end
 
+  # :root_pass and bmc :password should not update the Host and Nic passwords when blank
+  # This method removes them from the params hash to avoid any processing of these attributes.
+  def cleanup_passwords
+    params[:host].except!(:root_pass) if params[:host][:root_pass].blank?
+    if @host.type == "Host::Managed" && params[:host][:interfaces_attributes]
+      params[:host][:interfaces_attributes].each do |k, v|
+        params[:host][:interfaces_attributes]["#{k}"].except!(:password) if params[:host][:interfaces_attributes]["#{k}"][:password].blank?
+      end
+    end
+  end
 end

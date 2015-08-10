@@ -1,5 +1,4 @@
 class ComputeResourcesVmsController < ApplicationController
-
   def index
     @compute_resource = find_compute_resource(:view_compute_resources_vms)
     @vms = @compute_resource.vms.all(params[:filters] || {})
@@ -9,6 +8,8 @@ class ComputeResourcesVmsController < ApplicationController
       format.json { render :json => @vms }
     end
   rescue => e
+    logger.warn "Error has occurred while listing VMs on #{@compute_resource}: #{e}"
+    logger.debug e.backtrace.join("\n")
     render :partial => 'compute_resources_vms/error', :locals => { :errors => e.message }
   end
 
@@ -122,5 +123,4 @@ class ComputeResourcesVmsController < ApplicationController
     error _("Error - %{message}") % { :message => _(e.message) }
     redirect_to :back
   end
-
 end

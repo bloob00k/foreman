@@ -1,7 +1,6 @@
 module Api
   module V1
     class OperatingsystemsController < V1::BaseController
-
       resource_description do
         name 'Operating systems'
       end
@@ -35,7 +34,7 @@ module Api
         param :description, String
         param :family, String
         param :release_name, String
-        param :password_hash, String, :desc => 'Root password hash function to use, one of MD5, SHA256, SHA512'
+        param :password_hash, String, :desc => 'Root password hash function to use, one of MD5, SHA256, SHA512, Base64'
       end
 
       def create
@@ -52,7 +51,7 @@ module Api
         param :description, String
         param :family, String
         param :release_name, String
-        param :password_hash, String, :desc => 'Root password hash function to use, one of MD5, SHA256, SHA512'
+        param :password_hash, String, :desc => 'Root password hash function to use, one of MD5, SHA256, SHA512, Base64'
       end
 
       def update
@@ -78,7 +77,6 @@ module Api
       rescue => e
         render :json => e.to_s, :status => :unprocessable_entity
       end
-
     end
   end
 end

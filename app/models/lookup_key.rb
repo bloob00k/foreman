@@ -135,7 +135,14 @@ class LookupKey < ActiveRecord::Base
   def value_before_type_cast(val)
     case key_type.to_sym
       when :json, :array
-        val = JSON.dump val
+        begin
+          val = JSON.dump(val)
+        rescue JSON::GeneratorError => error
+          ## http://projects.theforeman.org/issues/9553
+          ## @TODO: remove when upgrading to json >= 1.8
+          logger.debug "Fallback to quirks mode from error: '#{error}'"
+          val = JSON.dump_in_quirks_mode(val)
+        end
       when :yaml, :hash
         val = YAML.dump val
         val.sub!(/\A---\s*$\n/, '')
@@ -156,6 +163,15 @@ class LookupKey < ActiveRecord::Base
         element
       end
     end
+  end
+
+  def contains_erb?(value)
+    value =~ /<%.*%>/
+  end
+
+  def overridden?(host)
+    return false unless host.is_a?(Host::Base) || host.is_a?(Hostgroup)
+    lookup_values.find_by_match(host.send(:lookup_value_match)).present?
   end
 
   private
@@ -198,9 +214,8 @@ class LookupKey < ActiveRecord::Base
     end.join("\n")
   end
 
-
   def validate_and_cast_default_value
-    return true if default_value.nil?
+    return true if default_value.nil? || contains_erb?(default_value)
     begin
       self.default_value = cast_validate_value self.default_value
       true
@@ -268,11 +283,11 @@ class LookupKey < ActiveRecord::Base
   end
 
   def cast_value_yaml(value)
-    value = YAML.load value
+    YAML.load value
   end
 
   def cast_value_json(value)
-    value = JSON.load value
+    JSON.load value
   end
 
   def ensure_type
@@ -282,13 +297,17 @@ class LookupKey < ActiveRecord::Base
   end
 
   def validate_regexp
-    return true unless (validator_type == 'regexp')
-    errors.add(:default_value, _("is invalid")) and return false unless (default_value =~ /#{validator_rule}/)
+    return true if (validator_type != 'regexp' || (contains_erb?(default_value) && Setting[:interpolate_erb_in_parameters]))
+    valid = (default_value =~ /#{validator_rule}/)
+    errors.add(:default_value, _("is invalid")) unless valid
+    valid
   end
 
   def validate_list
-    return true unless (validator_type == 'list')
-    errors.add(:default_value, _("%{default_value} is not one of %{validator_rule}") % { :default_value => default_value, :validator_rule => validator_rule }) and return false unless validator_rule.split(KEY_DELM).map(&:strip).include?(default_value)
+    return true if (validator_type != 'list' || (contains_erb?(default_value) && Setting[:interpolate_erb_in_parameters]))
+    valid = validator_rule.split(KEY_DELM).map(&:strip).include?(default_value)
+    errors.add(:default_value, _("%{default_value} is not one of %{validator_rule}") % { :default_value => default_value, :validator_rule => validator_rule }) unless valid
+    valid
   end
 
   def disable_merge_overrides
@@ -302,5 +321,4 @@ class LookupKey < ActiveRecord::Base
       self.errors.add(:avoid_duplicates, _("can only be set for arrays that have merge_overrides set to true"))
     end
   end
-
 end

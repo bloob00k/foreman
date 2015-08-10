@@ -72,11 +72,16 @@ class AuthSourceLdap < AuthSource
 
   def to_config(login = nil, password = nil)
     raise ::Foreman::Exception.new(N_('Cannot create LDAP configuration for %s without dedicated service account'), self.name) if login.nil? && use_user_login_for_service?
-    { :host    => host,    :port => port, :encryption => (tls ? :simple_tls : nil),
+    { :host    => host,    :port => port, :encryption => encryption_config,
       :base_dn => base_dn, :group_base => groups_base, :attr_login => attr_login,
       :server_type  => server_type.to_sym, :search_filter => ldap_filter,
       :anon_queries => account.blank?, :service_user => service_user(login),
       :service_pass => use_user_login_for_service? ? password : account_password }
+  end
+
+  def encryption_config
+    return nil unless tls
+    { :method => :simple_tls, :tls_options => { :verify_mode => OpenSSL::SSL::VERIFY_PEER } }
   end
 
   def ldap_con(login = nil, password = nil)
@@ -87,8 +92,20 @@ class AuthSourceLdap < AuthSource
     end
   end
 
-  def update_usergroups(login, password)
-    ldap_con(login, password).group_list(login).each do |name|
+  def update_usergroups(login)
+    if use_user_login_for_service?
+      logger.info "Skipping user group update for user #{login} as $login is in use, group sync is unsupported"
+      return
+    end
+
+    unless usergroup_sync?
+      logger.info "Skipping user group update for user #{login} as usergroup_sync is disabled"
+      return
+    end
+
+    internal = User.find(login).external_usergroups.map(&:name)
+    external = ldap_con.group_list(login)
+    (internal | external).each do |name|
       begin
         external_usergroup = external_usergroups.find_by_name(name)
         external_usergroup.refresh if external_usergroup.present?
@@ -157,7 +174,9 @@ class AuthSourceLdap < AuthSource
 
   def validate_ldap_filter
     Net::LDAP::Filter.construct(ldap_filter)
-  rescue Net::LDAP::LdapError => text
+  rescue Net::LDAP::LdapError, Net::LDAP::FilterSyntaxInvalidError => e
+    logger.error e.message
+    logger.error e.backtrace.join("\n")
     errors.add(:ldap_filter, _("invalid LDAP filter syntax"))
   end
 
@@ -169,5 +188,4 @@ class AuthSourceLdap < AuthSource
   def service_user(login)
     use_user_login_for_service? ? account.sub("$login", login) : account
   end
-
 end

@@ -144,7 +144,6 @@ namespace :puppet do
       end
     end
 
-
     desc "Imports only the puppet environments from SmartProxy source."
     task :environments_only, [:batch] => :environment do | t, args |
       args.batch = args.batch == "true"
@@ -206,7 +205,7 @@ namespace :puppet do
 
       Host.find_each do |host|
         $stdout.print "processing #{host.name} "
-        nodeinfo = YAML::load %x{#{script} #{host.name}}
+        nodeinfo = YAML::load `#{script} #{host.name}`
         if nodeinfo.is_a?(Hash)
           $stdout.puts "DONE" if host.importNode nodeinfo
         else
@@ -217,4 +216,11 @@ namespace :puppet do
     end
   end
 
+  desc "Correct hosts counts for all classes in case they are wrong"
+  task :fix_total_hosts => :environment do
+    if Puppetclass.count > 0
+      User.current = User.anonymous_admin
+      Puppetclass.all.each(&:update_total_hosts)
+    end
+  end
 end

@@ -21,16 +21,6 @@ class OperatingsystemTest < ActiveSupport::TestCase
     assert !operating_system.save
   end
 
-  test "name shouldn't contain white spaces" do
-    operating_system = Operatingsystem.new :name => " U bun     tu ", :major => "9"
-    assert !operating_system.name.squeeze(" ").tr(' ', '').empty?
-    assert !operating_system.save
-
-    operating_system.name.squeeze!(" ").tr!(' ', '')
-    assert !operating_system.name.include?(' ')
-    assert operating_system.save
-  end
-
   test "major should be numeric" do
     operating_system = Operatingsystem.new :name => "Ubuntu", :major => "9"
     assert operating_system.major.to_i != 0 if operating_system.major != "0"
@@ -182,8 +172,8 @@ class OperatingsystemTest < ActiveSupport::TestCase
 
     test "families_as_collection contains correct names and values" do
       families = Operatingsystem.families_as_collection
-      assert_equal ["AIX", "Altlinux", "Arch Linux", "Debian", "FreeBSD", "Gentoo", "Junos", "Red Hat", "SUSE", "Solaris", "Windows"], families.map(&:name).sort
-      assert_equal ["AIX", "Altlinux", "Archlinux", "Debian", "Freebsd", "Gentoo", "Junos", "Redhat", "Solaris", "Suse", "Windows"], families.map(&:value).sort
+      assert_equal ["AIX", "Altlinux", "Arch Linux", "CoreOS", "Debian", "FreeBSD", "Gentoo", "Junos", "Red Hat", "SUSE", "Solaris", "Windows"], families.map(&:name).sort
+      assert_equal ["AIX", "Altlinux", "Archlinux", "Coreos", "Debian", "Freebsd", "Gentoo", "Junos", "Redhat", "Solaris", "Suse", "Windows"], families.map(&:value).sort
     end
   end
 
@@ -235,9 +225,9 @@ class OperatingsystemTest < ActiveSupport::TestCase
   end
 
   test "should find os name using free text search only" do
-    operatingsystems = Operatingsystem.search_for('OpenSuse')
+    operatingsystems = Operatingsystem.search_for('centos')
     assert_equal 1, operatingsystems.count
-    assert_equal operatingsystems(:suse), operatingsystems.first
+    assert_equal operatingsystems(:centos5_3), operatingsystems.first
   end
 
   test "should create os with a name of 255 characters" do
@@ -290,7 +280,7 @@ class OperatingsystemTest < ActiveSupport::TestCase
     pid = Time.now.to_i
     operatingsystem = FactoryGirl.build(:operatingsystem, :os_parameters_attributes =>
         {pid += 1=>{"name"=>"a", "value"=>"1", :nested => ""},
-         pid += 1=>{"name"=>"b", "value"=>"1", :nested => ""}})
+         pid +  1=>{"name"=>"b", "value"=>"1", :nested => ""}})
     assert_valid operatingsystem
   end
 
@@ -299,7 +289,7 @@ class OperatingsystemTest < ActiveSupport::TestCase
     operatingsystem = FactoryGirl.build(:operatingsystem, :os_parameters_attributes =>
         {pid += 1=>{"name"=>"a", "value"=>"1", :nested => true},
          pid += 1=>{"name"=>"a", "value"=>"2", :nested => true},
-         pid += 1=>{"name"=>"b", "value"=>"1", :nested => true}})
+         pid +  1=>{"name"=>"b", "value"=>"1", :nested => true}})
     refute_valid operatingsystem
     assert_equal "has already been taken", operatingsystem.os_parameters.select {|param| param.name=='a'}.sort[1].errors[:name].first
     assert_equal "Please ensure the following parameters name are unique", operatingsystem.errors[:os_parameters].first
@@ -318,9 +308,8 @@ class OperatingsystemTest < ActiveSupport::TestCase
     operatingsystem = FactoryGirl.build(:operatingsystem, :os_parameters_attributes =>
         {pid += 1=>{"value"=>"1", :nested => ""},
          pid += 1=>{"name"=>"a", "value"=>"2", :nested => ""},
-         pid += 1=>{"name"=>"b", "value"=>"1", :nested => ""}})
+         pid +  1=>{"name"=>"b", "value"=>"1", :nested => ""}})
     refute_valid operatingsystem
-
   end
 
   context 'os default templates' do
@@ -355,4 +344,43 @@ class OperatingsystemTest < ActiveSupport::TestCase
     assert_equal("#{operatingsystem.id}-applet-מערכתההפעלהשלי 4", operatingsystem.to_param)
   end
 
+  test 'interpolated $version does not include dots if only major is specified' do
+    operatingsystem = FactoryGirl.build(:operatingsystem, :name => 'foo', :major => '4')
+    result_path = operatingsystem.interpolate_medium_vars('http://foo.org/$version',
+                                                          'x64', operatingsystem)
+    assert result_path, 'http://foo.org/4'
+  end
+
+  context 'name should be unique in scope of major and minor' do
+    setup do
+      @os = FactoryGirl.create(:operatingsystem, :name => 'centos', :major => 8, :minor => 3)
+    end
+
+    test 'should not create os with existing name, major and minor' do
+      operatingsystem = Operatingsystem.new(:name => "centos", :major => '8', :minor => '3')
+      assert_equal(@os.name, operatingsystem.name)
+      assert_equal(@os.major, operatingsystem.major)
+      assert_equal(@os.minor, operatingsystem.minor)
+      refute operatingsystem.valid?
+      refute operatingsystem.save
+    end
+
+    test 'should create os with existing name, major and different minor' do
+      operatingsystem = Operatingsystem.new(:name => "centos", :major => '8', :minor => '9')
+      assert_equal(@os.name, operatingsystem.name)
+      assert_equal(@os.major, operatingsystem.major)
+      refute_equal(@os.minor, operatingsystem.minor)
+      assert operatingsystem.valid?
+      assert operatingsystem.save
+    end
+
+    test 'should create os with existing name, minor and different major' do
+      operatingsystem = Operatingsystem.new(:name => "centos", :major => '7', :minor => '3')
+      assert_equal(@os.name, operatingsystem.name)
+      assert_equal(@os.minor, operatingsystem.minor)
+      refute_equal(@os.major, operatingsystem.major)
+      assert operatingsystem.valid?
+      assert operatingsystem.save
+    end
+  end
 end

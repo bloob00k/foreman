@@ -60,15 +60,26 @@ class DnsOrchestrationTest < ActiveSupport::TestCase
 
   def test_bmc_should_have_valid_dns_records
     if unattended?
-      h = FactoryGirl.create(:host, :with_dns_orchestration)
-      b = nics(:bmc)
-      b.host   = h
-      b.domain = domains(:mydomain)
-      b.subnet = subnets(:five)
+      h = FactoryGirl.create(:host, :with_dns_orchestration, :location => nil, :organization => nil)
+      b = FactoryGirl.create(:nic_bmc, :host => h,
+                             :domain => domains(:mydomain),
+                             :subnet => subnets(:five),
+                             :name => h.shortname,
+                             :ip => '10.0.0.3')
       assert b.dns?
       assert b.reverse_dns?
-      assert_equal "#{b.name}.#{b.domain.name}/#{b.ip}", b.dns_a_record.to_s
-      assert_equal "#{b.ip}/#{b.name}.#{b.domain.name}", b.dns_ptr_record.to_s
+      assert_equal "#{b.shortname}.#{b.domain.name}/#{b.ip}", b.dns_a_record.to_s
+      assert_equal "#{b.ip}/#{b.shortname}.#{b.domain.name}", b.dns_ptr_record.to_s
+    end
+  end
+
+  test 'unmanaged should not call methods after managed?' do
+    if unattended?
+      h = FactoryGirl.create(:host)
+      Nic::Managed.any_instance.expects(:ip_available?).never
+      assert h.valid?
+      assert_equal false, h.dns?
+      assert_equal false, h.reverse_dns?
     end
   end
 end

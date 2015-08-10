@@ -1,4 +1,4 @@
-<%= javascript 'host_edit', 'class_edit', 'compute_resource', 'lookup_keys'%>
+<%= javascript 'hosts', 'host_edit', 'host_edit_interfaces', 'class_edit', 'compute_resource', 'lookup_keys'%>
 <%= render "hosts/dhcp_lease_errors" if has_dhcp_lease_errors?(@host.errors) %>
 <%= render "hosts/conflicts" if (!has_dhcp_lease_errors?(@host.errors) && has_conflicts?(@host.errors)) %>
 <%= render "hosts/progress" %>
@@ -13,8 +13,8 @@
       <% if SmartProxy.with_features("Puppet").count > 0 %>
         <li><a href="#puppet_klasses" data-toggle="tab"><%= _('Puppet Classes') %></a></li>
       <% end %>
+      <li id="network_tab" data-refresh-url="<%= interfaces_hosts_path %>"><a href="#network" data-toggle="tab"><%= _('Interfaces') %></a></li>
       <% if SETTINGS[:unattended] and @host.managed %>
-        <li><a href="#network" data-toggle="tab"><%= _('Network') %></a></li>
         <li><a href="#os" data-toggle="tab"><%= _('Operating System') %></a></li>
         <% if authorized_for(:controller => "Compute::Resources::Vms", :action => :create) %>
           <li id="compute_resource_tab" <%= display? !(@host.compute_resource_id  || params[:host] && params[:host][:compute_resource_id].present?)%>><a href="#compute_resource" data-toggle="tab"><%= _('Virtual Machine') %></a></li>
@@ -27,26 +27,15 @@
     <div class="tab-content">
 
       <div class="tab-pane active" id="primary">
-        <%= text_f f, :name, :size => "col-md-8", :value => name_field(@host) %>
+        <%= text_f f, :name, :size => "col-md-5", :value => name_field(@host),
+            :help_inline => _("This value is used also as the host's primary interface name.") %>
 
         <% if show_organization_tab?  %>
-          <%= select_f f, :organization_id, Organization.my_organizations, :id, :to_label,
-            { :include_blank => !@host.managed?, :selected => @organization.try(:id)},
-            { :disabled => !@host.new_record?,
-              :onchange => 'organization_changed(this);', :label => _("Organization"), :'data-host-id' => @host.id,
-              :'data-url' => process_taxonomy_hosts_path,
-              :help_inline => :indicator,
-              :required => SETTINGS[:organizations_enabled] } %>
+          <%= host_taxonomy_select(f, Organization) %>
         <% end %>
 
         <% if show_location_tab? %>
-          <%= select_f f, :location_id, Location.my_locations, :id, :to_label,
-            { :include_blank => !@host.managed?, :selected => @location.try(:id) },
-            { :disabled => !@host.new_record?,
-              :onchange => 'location_changed(this);', :label => _("Location"), :"data-host-id" => @host.id,
-              :'data-url' => process_taxonomy_hosts_path, :selected => Location.my_locations,
-              :help_inline => :indicator,
-              :required => SETTINGS[:locations_enabled] } %>
+          <%= host_taxonomy_select(f, Location) %>
         <% end %>
 
         <%= select_f f, :hostgroup_id, accessible_hostgroups, :id, :to_label,
@@ -76,7 +65,11 @@
         <%= select_f f, :environment_id, Environment.with_taxonomy_scope_override(@location,@organization).order(:name), :id, :to_label, { :include_blank => true },
             {:onchange => 'update_puppetclasses(this)', :'data-url' => hostgroup_or_environment_selected_hosts_path,
             :'data-host-id' => @host.id, :help_inline => :indicator} %>
+
         <%= puppet_master_fields f %>
+
+        <%= realm_field f %>
+
       </div>
 
       <div class="tab-pane" id="puppet_klasses">
@@ -90,6 +83,10 @@
       <%= f.hidden_field :managed %>
       <%= f.hidden_field :progress_report_id, :data=>{:url=>task_path(@host.progress_report_id)} %>
       <%= f.hidden_field :type, :value => @host.type if @host.type_changed? %>
+
+      <div class="tab-pane"  id="network">
+        <%= render 'hosts/interfaces', :host => @host, :f => f %>
+      </div>
 
       <%= render('hosts/unattended', :f => f) if SETTINGS[:unattended] and @host.managed %>
 

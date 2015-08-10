@@ -3,7 +3,6 @@ require 'uri'
 
 module Foreman::Model
   class Ovirt < ComputeResource
-
     validates :url, :format => { :with => URI.regexp }
     validates :user, :password, :presence => true
     before_create :update_public_key
@@ -32,7 +31,7 @@ module Foreman::Model
     end
 
     def max_memory
-      16*1024*1024*1024
+      16*Foreman::SIZE[:giga]
     end
 
     def quotas
@@ -121,7 +120,7 @@ module Foreman::Model
 
     def available_networks(cluster_id = nil)
       raise ::Foreman::Exception.new(N_('Cluster ID is required to list available networks')) if cluster_id.nil?
-      cluster_networks = networks({:cluster_id => cluster_id})
+      networks({:cluster_id => cluster_id})
     end
 
     def available_storage_domains(storage_domain = nil)
@@ -172,7 +171,7 @@ module Foreman::Model
 
     def save_vm(uuid, attr)
       vm = find_vm_by_uuid(uuid)
-      vm.attributes.merge!(attr.symbolize_keys)
+      vm.attributes.merge!(attr.symbolize_keys).deep_symbolize_keys
       update_interfaces(vm, attr[:interfaces_attributes])
       update_volumes(vm, attr[:volumes_attributes])
       vm.interfaces
@@ -221,7 +220,7 @@ module Foreman::Model
     end
 
     def associated_host(vm)
-      Host.authorized(:view_hosts, Host).where(:mac => vm.interfaces.map { |i| i.mac }).first
+      associate_by("mac", vm.interfaces.map(&:mac))
     end
 
     def self.provider_friendly_name
@@ -296,6 +295,7 @@ module Foreman::Model
     end
 
     private
+
     def create_interfaces(vm, attrs)
       #first remove all existing interfaces
       vm.interfaces.each do |interface|
@@ -324,8 +324,8 @@ module Foreman::Model
     def update_interfaces(vm, attrs)
       interfaces = nested_attributes_for :interfaces, attrs
       interfaces.each do |interface|
-          vm.destroy_interface(:id => interface[:id]) if interface[:_delete] == '1' && interface[:id]
-          vm.add_interface(interface) if interface[:id].blank?
+        vm.destroy_interface(:id => interface[:id]) if interface[:_delete] == '1' && interface[:id]
+        vm.add_interface(interface) if interface[:id].blank?
       end
     end
 
@@ -336,6 +336,5 @@ module Foreman::Model
         vm.add_volume({:bootable => 'false', :quota => ovirt_quota, :blocking => api_version.to_f < 3.1}.merge(volume)) if volume[:id].blank?
       end
     end
-
   end
 end

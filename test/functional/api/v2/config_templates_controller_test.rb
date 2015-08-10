@@ -1,7 +1,6 @@
 require 'test_helper'
 
 class Api::V2::ConfigTemplatesControllerTest < ActionController::TestCase
-
   test "should get index" do
     get :index
     templates = ActiveSupport::JSON.decode(@response.body)
@@ -35,7 +34,6 @@ class Api::V2::ConfigTemplatesControllerTest < ActionController::TestCase
     ConfigTemplate.any_instance.stubs(:valid?).returns(true)
     put :update, { :id              => config_templates(:pxekickstart).to_param,
                    :config_template => { :template => "blah" } }
-    template = ActiveSupport::JSON.decode(@response.body)
     assert_response :ok
   end
 
@@ -56,9 +54,8 @@ class Api::V2::ConfigTemplatesControllerTest < ActionController::TestCase
     config_template = config_templates(:pxekickstart)
     config_template.os_default_templates.clear
     delete :destroy, { :id => config_template.to_param }
-    template = ActiveSupport::JSON.decode(@response.body)
     assert_response :ok
-    assert !ConfigTemplate.exists?(config_template.id)
+    refute ConfigTemplate.exists?(config_template.id)
   end
 
   test "should build pxe menu" do
@@ -75,5 +72,21 @@ class Api::V2::ConfigTemplatesControllerTest < ActionController::TestCase
                    :config_template => { :audit_comment => "aha", :template => "tmp" } }
     assert_response :success
     assert_equal "aha", config_templates(:pxekickstart).audits.last.comment
+  end
+
+  test 'should clone template' do
+    original_config_template = config_templates(:pxekickstart)
+    post :clone, { :id => original_config_template.to_param,
+                   :config_template => {:name => 'MyClone'} }
+    assert_response :success
+    template = ActiveSupport::JSON.decode(@response.body)
+    assert_equal(template['name'], 'MyClone')
+    assert_equal(template['template'], original_config_template.template)
+  end
+
+  test 'clone name should not be blank' do
+    post :clone, { :id => config_templates(:pxekickstart).to_param,
+                   :config_template => {:name => ''} }
+    assert_response :unprocessable_entity
   end
 end

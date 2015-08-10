@@ -73,11 +73,7 @@ class User < ActiveRecord::Base
   before_validation :normalize_locale
 
   def self.name_format
-    if RUBY_VERSION.start_with? '1.8'
-      /\A[ёЁа-яА-Яa-zA-Zà-üÀ-Ü0-9\s'_\-\.()<>;=,]*\z/u
-    else
-      /\A[[:alnum:]\s'_\-\.()<>;=,]*\z/
-    end
+    /\A[[:alnum:]\s'_\-\.()<>;=,]*\z/
   end
 
   validates :login, :presence => true, :uniqueness => {:case_sensitive => false, :message => N_("already exists")},
@@ -89,7 +85,7 @@ class User < ActiveRecord::Base
   validates :firstname, :lastname, :format => {:with => name_format}, :length => {:maximum => 50}, :allow_nil => true
   validate :name_used_in_a_usergroup, :ensure_hidden_users_are_not_renamed, :ensure_hidden_users_remain_admin,
            :ensure_privileges_not_escalated, :default_organization_inclusion, :default_location_inclusion,
-           :ensure_last_admin_remains_admin, :hidden_authsource_restricted
+           :ensure_last_admin_remains_admin, :hidden_authsource_restricted, :validate_timezone
   before_validation :prepare_password, :normalize_mail
   before_save       :set_lower_login
 
@@ -102,7 +98,7 @@ class User < ActiveRecord::Base
   scoped_search :on => :admin, :complete_value => { :true => true, :false => false }, :ext_method => :search_by_admin
   scoped_search :on => :last_login_on, :complete_value => :true, :only_explicit => true
   scoped_search :in => :roles, :on => :name, :rename => :role, :complete_value => true
-  scoped_search :in => :roles, :on => :id, :rename => :role_id
+  scoped_search :in => :roles, :on => :id, :rename => :role_id, :complete_enabled => false, :only_explicit => true
   scoped_search :in => :cached_usergroups, :on => :name, :rename => :usergroup, :complete_value => true
 
   default_scope lambda {
@@ -143,11 +139,11 @@ class User < ActiveRecord::Base
   end
 
   def hidden?
-    auth_source.kind_of? AuthSourceHidden
+    auth_source.is_a? AuthSourceHidden
   end
 
   def internal?
-    auth_source.kind_of? AuthSourceInternal
+    auth_source.is_a? AuthSourceInternal
   end
 
   def to_label
@@ -193,8 +189,9 @@ class User < ActiveRecord::Base
         # update with returned attrs, maybe some info changed in LDAP
         old_hash = user.avatar_hash
         User.as_anonymous_admin do
-          user.update_attributes(attrs.slice(:firstname, :lastname, :mail, :avatar_hash).delete_if { |k, v| v.blank? })
-        end if attrs.is_a? Hash
+          user.update_attributes(attrs.slice(:firstname, :lastname, :mail, :avatar_hash).delete_if { |k, v| v.blank? }) if attrs.is_a? Hash
+          user.auth_source.update_usergroups(login)
+        end
 
         # clean up old avatar if it exists and the image isn't in use by anyone else
         if old_hash.present? && user.avatar_hash != old_hash && !User.unscoped.where(:avatar_hash => old_hash).any?
@@ -383,6 +380,10 @@ class User < ActiveRecord::Base
     sweeper.expire_fragment(TopbarSweeper.fragment_name(id))
   end
 
+  def external_usergroups
+    usergroups.flat_map(&:external_usergroups).select { |group| group.auth_source == self.auth_source }
+  end
+
   private
 
   def prepare_password
@@ -394,7 +395,7 @@ class User < ActiveRecord::Base
 
   def welcome_mail
     return unless mail_enabled? && internal? && Setting[:send_welcome_email]
-    MailNotification[:welcome].deliver(:user => self.id)
+    MailNotification[:welcome].deliver(:user => self)
   end
 
   def encrypt_password(pass)
@@ -412,7 +413,7 @@ class User < ActiveRecord::Base
       # The default user can't auto create users, we need to change to Admin for this to work
       User.as_anonymous_admin do
         if user.save
-          AuthSource.find(attrs[:auth_source_id]).update_usergroups(login, password)
+          AuthSource.find(attrs[:auth_source_id]).update_usergroups(login)
           logger.info "User '#{user.login}' auto-created from #{user.auth_source}"
         else
           logger.info "Failed to save User '#{user.login}' #{user.errors.full_messages}"
@@ -528,5 +529,9 @@ class User < ActiveRecord::Base
     if auth_source_id_changed? && hidden? && ![ANONYMOUS_ADMIN, ANONYMOUS_API_ADMIN].include?(self.login)
       errors.add :auth_source, _("is not permitted")
     end
+  end
+
+  def validate_timezone
+    errors.add(:timezone, _("is not valid")) unless timezone.blank? || Time.find_zone(timezone)
   end
 end

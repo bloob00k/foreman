@@ -220,6 +220,19 @@ class SubnetTest < ActiveSupport::TestCase
     assert_equal '192.168.2.3', subnet.unused_ip
   end
 
+  test "should find unused IP excluding named values in internal DB if proxy is not set" do
+    host = FactoryGirl.create(:host)
+    subnet = FactoryGirl.create(:subnet, :name => 'my_subnet', :network => '192.168.2.0',
+                                :ipam => Subnet::IPAM_MODES[:db])
+    subnet.stubs(:dhcp? => false)
+    assert_equal '192.168.2.3', subnet.unused_ip(nil, ['192.168.2.1', '192.168.2.2'])
+
+    subnet.reload
+    FactoryGirl.create(:nic_managed, :ip => '192.168.2.1', :subnet_id => subnet.id, :host => host, :mac => '00:00:00:00:00:01')
+    FactoryGirl.create(:nic_managed, :ip => '192.168.2.2', :subnet_id => subnet.id, :host => host, :mac => '00:00:00:00:00:02')
+    assert_equal '192.168.2.4', subnet.unused_ip(nil, ['192.168.2.3'])
+  end
+
   test "#unused should respect subnet from and to if it's set" do
     host = FactoryGirl.create(:host)
     subnet = FactoryGirl.create(:subnet, :name => 'my_subnet', :network => '192.168.2.0', :from => '192.168.2.10', :to => '192.168.2.12',
@@ -247,7 +260,7 @@ class SubnetTest < ActiveSupport::TestCase
     subnet = FactoryGirl.create(:subnet, :name => 'my_subnet', :network => '192.168.2.0', :from => '192.168.2.10', :to => '192.168.2.12',
                                 :dns_primary => '192.168.2.2', :gateway => '192.168.2.3', :ipam => Subnet::IPAM_MODES[:db])
     host = FactoryGirl.create(:host, :subnet => subnet, :ip => '192.168.2.1')
-    interface = Nic::Managed.create :mac => "00:00:01:10:00:00", :host => host, :subnet => subnet, :name => "", :ip => '192.168.2.4'
+    Nic::Managed.create :mac => "00:00:01:10:00:00", :host => host, :subnet => subnet, :name => "", :ip => '192.168.2.4'
 
     assert_includes subnet.known_ips, '192.168.2.1'
     assert_includes subnet.known_ips, '192.168.2.2'
@@ -255,5 +268,4 @@ class SubnetTest < ActiveSupport::TestCase
     assert_includes subnet.known_ips, '192.168.2.4'
     assert_equal 4, subnet.known_ips.size
   end
-
 end

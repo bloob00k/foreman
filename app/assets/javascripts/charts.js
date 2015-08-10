@@ -44,8 +44,18 @@ $.fn.flot_pie = function(){
     $(target).bind("plotclick", function (event, pos, item) {
       search_on_click(event, item);
     });
+    resize_label(target.children('.pieLabel').first());
   });
 };
+
+function resize_label(label){
+  var labelOffset = parseInt(label.css('left'));
+  var ratio = (label.parent().width()-2*labelOffset)/label.width();
+  if (ratio < 1){
+    label.css('font-size', parseInt(label.css('font-size'))*ratio);
+  }
+  label.css('right', labelOffset); //make sure it is centered
+}
 
 function expanded_pie(target, data){
   $.plot(target, data, {
@@ -185,7 +195,7 @@ function flot_zoom(target, options, ranges) {
         xaxis: { min: ranges.xaxis.from, max: ranges.xaxis.to },
         yaxis: { min: ranges.yaxis.from, max: ranges.yaxis.to }
       }));
-  if(target.parents('.stats-well').find('.reset-zoom').size() == 0){
+  if(target.parents('.stats-well').find('.reset-zoom').length == 0){
     target.parents('.stats-well').prepend("<a class='reset-zoom btn btn-sm'>" + __('Reset zoom') + "</a>");
   }
 }
@@ -247,10 +257,11 @@ function search_on_click(event, item) {
 }
 
 function get_pie_chart(div, url) {
+
   if($("#"+div).length == 0)
   {
     $('body').append('<div id="' + div + '" class="modal fade"><div class="modal-dialog"><div class="modal-content"></div></div></div>');
-    $("#"+div+" .modal-content").append('<div class="modal-header"><button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button><h4 class="modal-title">' + __('Fact Chart') + '</h4></div>')
+    $("#"+div+" .modal-content").append('<div class="modal-header"><button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button><h4 class="modal-title"></h4></div>')
         .append('<div id="' + div + '-body" class="fact_chart modal-body">' + __('Loading') + ' ...</div>')
         .append('<div class="modal-footer"></div>');
 
@@ -259,7 +270,12 @@ function get_pie_chart(div, url) {
       $.getJSON(url, function(data) {
         var target = $("#"+div+"-body");
         target.empty();
+        var hostsCount = 0;
+        $.each(data.values,function() {
+          hostsCount += this.data;
+        });
         expanded_pie(target, data.values);
+        $('.modal-title').empty().append( __('Fact distribution chart') + ' - <b>' + data.name + ' </b><small> ('+ Jed.sprintf(n__("%s host", "%s hosts", hostsCount), hostsCount) +')</small>');
         target.attr('data-url', foreman_url("/hosts?search=facts." + data.name + "~~VAL1~"));
       });
     });
@@ -269,9 +285,9 @@ function get_pie_chart(div, url) {
 function expand_chart(ref){
   var chart = $(ref);
   if (!chart.hasClass('statistics-pie')){
-    chart = $(ref).parent().find('.statistics-pie');
+    chart = chart.parent().find('.statistics-pie');
   }
-  var modal_id = chart.attr('id')+'_modal';
+  var modal_id = chart[0].id+'_modal';
   if($("#"+modal_id).length == 0)
   {
     var new_chart = chart.clone().empty().attr('id', modal_id + "_chart").removeClass('small');

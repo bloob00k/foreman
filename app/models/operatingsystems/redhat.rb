@@ -1,5 +1,4 @@
 class Redhat < Operatingsystem
-
   PXEFILES = {:kernel => "vmlinuz", :initrd => "initrd.img"}
 
   # outputs kickstart installation medium based on the medium type (NFS or URL)
@@ -9,7 +8,7 @@ class Redhat < Operatingsystem
 
     case uri.scheme
       when 'http', 'https', 'ftp'
-         "url --url #{uri}"
+        "url --url #{uri}"
       else
         server = uri.select(:host, :port).compact.join(':')
         dir    = uri.select(:path, :query).compact.join('?')
@@ -48,5 +47,4 @@ class Redhat < Operatingsystem
   def self.model_name
     superclass.model_name
   end
-
 end
