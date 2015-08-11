@@ -131,20 +131,27 @@ module Foreman::Model
     private
 
     def client
-      @client ||= ::Fog::Compute.new(:provider           => :openstack,
-                                     :openstack_api_key  => password,
-                                     :openstack_username => user,
-                                     :openstack_auth_url => url,
-                                     :openstack_tenant   => tenant,
-                                     :connection_options => { :read_timeout => 120, :write_timeout => 120})
+      @client ||= ::Fog::Compute.new(:provider                => :openstack,
+                                     :openstack_api_key       => password,
+                                     :openstack_username      => user,
+                                     :openstack_auth_url      => url,
+                                     :openstack_project_name  => tenant || 'ESS',
+                                     :openstack_region        => 'ash2',
+                                     :openstack_project_domain   => 'GSG',
+                                     :openstack_user_domain   => 'default',
+                                     :connection_options      => { :read_timeout => 120, :write_timeout => 120})
     end
 
     def network_client
-      @network_client ||= ::Fog::Network.new(:provider           => :openstack,
-                                             :openstack_api_key  => password,
-                                             :openstack_username => user,
-                                             :openstack_auth_url => url,
-                                             :openstack_tenant   => tenant)
+      @network_client ||= ::Fog::Network.new(:provider                => :openstack,
+                                             :openstack_api_key       => password,
+                                             :openstack_username      => user,
+                                             :openstack_auth_url      => url,
+                                             :openstack_project_name  => tenant || 'ESS',
+                                             :openstack_region        => 'ash2',
+                                             :openstack_project_domain  => 'GSG',
+                                             :openstack_user_domain   => 'default',
+                                             :connection_options      => { :read_timeout => 120, :write_timeout => 120})
     rescue
       @network_client = nil
     end
